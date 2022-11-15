@@ -1,3 +1,0 @@
-/home/hayley/GDrive/Programming/PhD/parallelobox/build/release/CMakeFiles/parallelobox.dir
-/home/hayley/GDrive/Programming/PhD/parallelobox/build/release/CMakeFiles/edit_cache.dir
-/home/hayley/GDrive/Programming/PhD/parallelobox/build/release/CMakeFiles/rebuild_cache.dir

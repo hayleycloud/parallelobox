@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/parallelobox.dir/src/main.cpp.o CMakeFiles/parallelobox.dir/src/config.cpp.o -o parallelobox  /usr/lib/libgmpxx.so /usr/lib/libmpfr.so /usr/lib/libgmp.so /usr/lib/libgomp.so /usr/lib/libpthread.a 
