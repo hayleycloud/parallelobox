@@ -1,22 +1,15 @@
+#include "cgals.h"
 #include "config.h"
-
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/Surface_mesh.h>
-#include <CGAL/Iso_cuboid_3.h>
-#include <CGAL/Polygon_mesh_processing/clip.h>
-#include <CGAL/Polygon_mesh_processing/IO/polygon_mesh_io.h>
+#include "grid_cut.h"
 
 #include <omp.h>
 
 #include <limits>
+#include <sstream>
 #include <fstream>
 #include <filesystem>
 
-namespace PMP = CGAL::Polygon_mesh_processing;
 namespace fs = std::filesystem;
-
-typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-typedef CGAL::Surface_mesh<K::Point_3> Mesh;
 
 void bounds(K::Point_3& min, K::Point_3& max, const Mesh& mesh)
 {
@@ -46,6 +39,20 @@ void bounds(K::Point_3& min, K::Point_3& max, const Mesh& mesh)
 	max = K::Point_3(maxX, maxY, maxZ);
 }
 
+void recenter(Mesh& mesh)
+{
+	K::Point_3 c = CGAL::centroid(
+		mesh.points().begin(), 
+		mesh.points().end(),
+		CGAL::Dimension_tag<0>());
+	K::Vector_3 dc(-c.x(), -c.y(), -c.z());
+
+	for(Mesh::Vertex_index vIndex: mesh.vertices())
+	{
+		mesh.point(vIndex) += dc;
+	}
+}
+
 int run(int argc, char* argv[])
 {
 	Config config = handleArguments(argc, argv);
@@ -59,37 +66,60 @@ int run(int argc, char* argv[])
 
 	std::cout << "Mesh loaded!" << std::endl;
 
+	recenter(inputMesh);
+
+	std::cout << "Mesh re-centered." << std::endl;
+
 	K::Point_3 min, max;
 	bounds(min, max, inputMesh);
 
 	std::cout << "Min: " << min << ", Max: " << max << std::endl;
 
-	//for(Mesh::Vertex_index vd: inputMesh.vertices())
-	//	std::cout << inputMesh.point(vd) << std::endl;
-
 	min = min - K::Vector_3(1.0, 1.0, 1.0);
 	max = max + K::Vector_3(1.0, 1.0, 1.0);
+	K::Vector_3 size(max.x() - min.x(), max.y() - min.y(), max.z() - min.z());
 
-	CGAL::Iso_cuboid_3<K> cube1(
-		K::Point_3(0, min.y(), min.z()), 
-		K::Point_3(max.x(), max.y(), max.z()));
-	CGAL::Iso_cuboid_3<K> cube2(
-		K::Point_3(min.x(), min.y(), min.z()), 
-		K::Point_3(0, max.y(), max.z()));
+	auto fnormals = inputMesh.add_property_map<face_descriptor, K::Vector_3>(
+		"f:normals", CGAL::NULL_VECTOR).first;
+	PMP::compute_face_normals(inputMesh, fnormals);
 
-	Mesh leftCube(inputMesh), rightCube(inputMesh);
-	PMP::clip(leftCube, cube1, CGAL::parameters::clip_volume(true));
-	PMP::clip(rightCube, cube2, CGAL::parameters::clip_volume(true));
+	std::cout << "Computed normals." << std::endl;
+
+	Grid grid(size.x(), size.y(), size.z(), 2, 1, 2);
+	
+	std::vector<Mesh> subdivs;
+	grid.clip(inputMesh, subdivs);
+
+//	CGAL::Iso_cuboid_3<K> cube1(
+//		K::Point_3(0, min.y(), min.z()), 
+//		K::Point_3(max.x(), max.y(), max.z()));
+//	CGAL::Iso_cuboid_3<K> cube2(
+//		K::Point_3(min.x(), min.y(), min.z()), 
+//		K::Point_3(0, max.y(), max.z()));
 
 	fs::remove_all(config.outputDir);
 	fs::create_directory(config.outputDir);
 
+	size_t meshIndex = 0;
+	for(const Mesh& mesh: subdivs)
+	{
+		std::stringstream ss("");
+		ss << meshIndex << ".stl";
+
+		if(CGAL::IO::write_STL(config.outputDir + "/" + ss.str(), mesh))
+			std::cout << "Saved " << ss.str() << std::endl;
+		else
+			std::cerr << "Failed to write " << ss.str() << "!" << std::endl;
+
+		++meshIndex;
+	}
+
 	//std::ofstream("out.off") << inputMesh;
-	if(CGAL::IO::write_STL(config.outputDir + "/" + "left.stl", leftCube) &&
-	   CGAL::IO::write_STL(config.outputDir + "/" + "right.stl", rightCube))
-		std::cout << "Mesh re-saved!" << std::endl;
-	else
-		throw std::runtime_error("Could not save mesh!");
+	//if(CGAL::IO::write_STL(config.outputDir + "/" + "left.stl", leftCube) &&
+	//   CGAL::IO::write_STL(config.outputDir + "/" + "right.stl", rightCube))
+	//	std::cout << "Mesh re-saved!" << std::endl;
+	//else
+	//	throw std::runtime_error("Could not save mesh!");
 
 	std::chrono::time_point<std::chrono::steady_clock> endIval =
 		std::chrono::steady_clock::now();
@@ -103,14 +133,18 @@ int run(int argc, char* argv[])
 
 int main(int argc, char* argv[])
 {
+#ifndef DEBUG
 	try
 	{
+#endif
 		return run(argc, argv);
+#ifndef DEBUG
 	}
 	catch(const std::exception& ex)
 	{
 		std::cerr << ex.what() << std::endl;
 		return EXIT_FAILURE;
 	}
+#endif
 }
 

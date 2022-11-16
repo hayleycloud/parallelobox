@@ -10,6 +10,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(CGAL REQUIRED COMPONENTS Core)
 find_package(OpenMP)
 
-add_executable(parallelobox src/main.cpp src/config.cpp)
+option(USE_DEBUG "Use debug mode" OFF)
+
+if(USE_DEBUG)
+	add_definitions(-DDEBUG)
+endif()
+
+add_executable(parallelobox src/main.cpp src/config.cpp src/grid_cut.cpp)
 target_link_libraries(parallelobox CGAL::CGAL CGAL::CGAL_Core OpenMP::OpenMP_CXX)
 
