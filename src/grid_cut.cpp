@@ -49,7 +49,42 @@ const K::Iso_cuboid_3& Grid::get(size_t x, size_t y, size_t z) const
 	return m_Grid[getOffset(x, y, z)];
 }
 
-void Grid::clip(Mesh& mesh, std::vector<Mesh>& outMeshes) const
+const K::Iso_cuboid_3& Grid::get(const Coord& coord) const
+{
+	return m_Grid[getOffset(coord.x, coord.y, coord.z)];
+}
+
+void Grid::clipVolume(Mesh& mesh, std::vector<Mesh>& outMeshes) const
+{
+	clip(mesh, outMeshes, true);
+}
+
+void Grid::clipVolume(Mesh& mesh, size_t x, size_t y, size_t z) const
+{
+	clip(mesh, x, y, z, true);
+}
+
+void Grid::clipVolume(Mesh& mesh, const Coord& coord) const
+{
+	clip(mesh, coord.x, coord.y, coord.z, true);
+}
+
+void Grid::clipSurface(Mesh& mesh, std::vector<Mesh>& outMeshes) const
+{
+	clip(mesh, outMeshes, false);
+}
+
+void Grid::clipSurface(Mesh& mesh, size_t x, size_t y, size_t z) const
+{
+	clip(mesh, x, y, z, false);
+}
+
+void Grid::clipSurface(Mesh& mesh, const Coord& coord) const
+{
+	clip(mesh, coord.x, coord.y, coord.z, false);
+}
+
+void Grid::clip(Mesh& mesh, std::vector<Mesh>& outMeshes, bool fill) const
 {
 	outMeshes.resize(m_Width * m_Height * m_Thickness);
 
@@ -61,17 +96,17 @@ void Grid::clip(Mesh& mesh, std::vector<Mesh>& outMeshes) const
 			for(size_t x = 0; x < m_Width; ++x)
 			{
 				Mesh out(mesh);
-				clip(out, x, y, z);
+				clip(out, x, y, z, fill);
 				outMeshes[getOffset(x, y, z)] = out;
 			}
 		}
 	}
 }
 
-void Grid::clip(Mesh& mesh, size_t x, size_t y, size_t z) const
+void Grid::clip(Mesh& mesh, size_t x, size_t y, size_t z, bool fill) const
 {
 	const K::Iso_cuboid_3& bbox = get(x, y, z);
-	std::cout << bbox << std::endl;
-	PMP::clip(mesh, bbox, CGAL::parameters::clip_volume(true));
+	//std::cout << bbox << std::endl;
+	PMP::clip(mesh, bbox, CGAL::parameters::clip_volume(fill));
 }
 
