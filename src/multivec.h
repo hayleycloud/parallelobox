@@ -11,6 +11,30 @@ template <class T>
 using vector3 = std::vector<std::vector<std::vector<T>>>;
 
 template <class T>
+T& get(vector2<T>& vec, int x, int y) 
+{
+	return vec[y][x];
+}
+
+template <class T>
+const T& get(const vector2<T>& vec, int x, int y) 
+{
+	return vec[y][x];
+}
+
+template <class T>
+T& get(vector3<T>& vec, int x, int y, int z)
+{
+	return vec[z][y][x];
+}
+
+template <class T>
+const T& get(const vector3<T>& vec, int x, int y, int z)
+{
+	return vec[z][y][x];
+}
+
+template <class T>
 void forEach(std::function<void(T&)> callback, vector2<T>& data)
 {
 	for(size_t y = 0; y < data.size(); ++y)
@@ -32,6 +56,35 @@ void forEach(std::function<void(T&)> callback, vector3<T>& data)
 			for(size_t x = 0; x < data[z][y].size(); ++x)
 			{
 				callback(data[z][y][x]);
+			}
+		}
+	}
+}
+
+template <class T>
+void forEachIndexed(
+	std::function<void(T&,int,int)> callback, vector2<T>& data)
+{
+	for(size_t y = 0; y < data.size(); ++y)
+	{
+		for(size_t x = 0; x < data[y].size(); ++x)
+		{
+			callback(data[y][x], x, y);
+		}
+	}
+}
+
+template <class T>
+void forEachIndexed(
+	std::function<void(T&,int,int,int)> callback, vector3<T>& data)
+{
+	for(size_t z = 0; z < data.size(); ++z)
+	{
+		for(size_t y = 0; y < data[z].size(); ++y)
+		{
+			for(size_t x = 0; x < data[z][y].size(); ++x)
+			{
+				callback(data[z][y][x], x, y, z);
 			}
 		}
 	}

@@ -1,35 +1,37 @@
 #include "meshbox.h"
 
-MeshBox::ContentType determineContentType(
+GridCell::ContentType determineContentType(
 	const Mesh& mesh, 
 	const Mesh& surfMesh, 
 	const Mesh& volMesh,
-	const Grid& grid, 
 	int x, int y, int z)
 {
 	if(surfMesh.number_of_vertices() > 0)
-		return MeshBox::ContentType::Boundary;
+		return GridCell::ContentType::Boundary;
 	else 
 	{
 		if(volMesh.number_of_vertices() > 0)
-			return MeshBox::ContentType::Internal;
+			return GridCell::ContentType::Internal;
 		else
-			return MeshBox::ContentType::Empty;
+			return GridCell::ContentType::Empty;
 	}
 }
 
-mv::vector3<MeshBox> getSurfaceBoxes(Mesh& mesh, const Grid& grid)
+void getSurfaceBoxes(
+	const Mesh& mesh, 
+	const Grid& grid, 
+	mv::vector3<GridCell>& gridCells, 
+	std::list<MeshBox>& meshBoxes)
 {
-	mv::vector3<MeshBox> gridBoxes;
-	gridBoxes.resize(grid.getThickness());
+	gridCells.resize(grid.getThickness());
 	
 	#pragma omp parallel for
 	for(int z = 0; z < grid.getThickness(); ++z)
 	{
-		gridBoxes[z].resize(grid.getHeight());
+		gridCells[z].resize(grid.getHeight());
 		for(int y = 0; y < grid.getHeight(); ++y)
 		{
-			gridBoxes[z][y].resize(grid.getWidth());
+			gridCells[z][y].resize(grid.getWidth());
 			for(int x = 0; x < grid.getWidth(); ++x)
 			{
 				const auto& dims = grid.get(x, y, z);
@@ -41,20 +43,31 @@ mv::vector3<MeshBox> getSurfaceBoxes(Mesh& mesh, const Grid& grid)
 				grid.clipVolume(volMesh, x, y, z);
 
 				auto contentType = determineContentType(
-					mesh, surfMesh, volMesh,
-					grid, 
-					x, y, z);
+					mesh, surfMesh, volMesh, x, y, z);
 
-				gridBoxes[z][y][x] = { 
-					contentType == MeshBox::ContentType::Boundary ?
+				gridCells[z][y][x] = (GridCell) { 
+					Vector(x, y, z),
+					contentType == GridCell::ContentType::Boundary ?
 						volMesh : surfMesh, 
-					dims, 
+					nullptr, 
+					std::array<MeshBox*,6>(),
 					contentType 
 				};
+
+				if(contentType == GridCell::ContentType::Boundary)
+				{
+					meshBoxes.push_back((MeshBox) {
+						volMesh, 
+						{ std::addressof(gridCells[z][y][x]) }, 
+						Cuboid(Vector(x, y, z), Vector(1, 1, 1))
+					});
+
+					gridCells[z][y][x].parent = std::addressof(meshBoxes.back());
+					for(auto& sideParent: gridCells[z][y][x].parents)
+						sideParent = gridCells[z][y][x].parent;
+				}
 			}
 		}
 	}
-
-	return gridBoxes;
 }
 

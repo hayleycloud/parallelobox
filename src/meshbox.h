@@ -3,11 +3,17 @@
 #include "cgals.h"
 #include "grid_cut.h"
 #include "multivec.h"
+#include "vec.h"
 
-struct MeshBox
+struct MeshBox;
+
+struct GridCell
 {
+	Vector3D position;
+
 	Mesh mesh;
-	K::Iso_cuboid_3 dims;
+	MeshBox* parent;
+	std::array<MeshBox*,6> sideParents;
 
 	enum class ContentType {
 		Internal,
@@ -16,5 +22,18 @@ struct MeshBox
 	} type;
 };
 
-mv::vector3<MeshBox> getSurfaceBoxes(Mesh& mesh, const Grid& grid);
+struct MeshBox
+{
+	Mesh mesh;
+	std::list<GridCell*> children;
+	
+	Cuboid dims;
+	//K::Iso_cuboid_3 dims;
+};
+
+void getSurfaceBoxes(
+	const Mesh& mesh, 
+	const Grid& grid,
+	mv::vector3<GridCell>& gridCells, 
+	std::list<MeshBox>& meshBoxes);
 
