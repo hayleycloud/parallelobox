@@ -522,7 +522,7 @@ void addCellsToMeshBox(
             for(int z = a.z; z < b.z; z++) 
 			{
 				GridCell* cell = std::addressof(mv::get(gridCells.cells, x, y, z));
-				assert(cell->sideParent[gridCells.sideIndex] == nullptr);
+				assert(cell->sideParents[gridCells.sideIndex] == nullptr);
 
 				cell->sideParents[gridCells.sideIndex] = std::addressof(box);
                 box.children.push_back(cell);
