@@ -45,5 +45,10 @@ void extractUniqueMeshBoxes(
 	std::list<MeshBox*>& meshBoxes,
 	int sideIndex);
 
-void assignAsParent(mv::vector3<GridCell>& gridCells, int sideIndex);
+void clearMeshBoxChanges(MeshBox& meshbox);
+
+void clearMeshBoxChildren(MeshBox& meshbox);
+
+void assignParents(mv::vector3<GridCell>& gridCells, int sideIndex);
+
 

@@ -76,6 +76,19 @@ void getSurfaceBoxes(
 	}
 }
 
+const K::Iso_cuboid_3 cuboidFrom(MeshBox& meshbox)
+{
+	K::Vector_3 origin(meshbox.origin.x, meshbox.origin.y, meshbox.origin.z);
+	K::Vector_3 size(meshbox.size.x, meshbox.size.y, meshbox.size.z);
+
+	return CGAL::Iso_cuboid_3<K>(origin, origin + size);
+}
+
+void clipFromMesh(Mesh& mesh, MeshBox& child)
+{
+	PMP::clip(mesh, cuboidFrom(child), CGAL::parameters::clip_volume(true));
+}
+
 void extractUniqueMeshBoxes(
 	mv::vector3<GridCell>& gridCells, 
 	std::list<MeshBox*>& meshBoxes,
@@ -92,9 +105,21 @@ void extractUniqueMeshBoxes(
 	std::copy(meshBoxSet.begin(), meshBoxSet.end(), std::back_inserter(meshBoxes));
 }
 
-void assignAsParent(mv::vector3<GridCell>& gridCells, int sideIndex)
+void clearMeshBoxChanges(MeshBox& meshbox)
+{
+	std::fill(meshbox.sideChanges.begin(), meshbox.sideChanges.end(), false);
+}
+
+void clearMeshBoxChildren(MeshBox& meshbox)
+{
+	meshbox.children.clear();
+}
+
+void assignParents(mv::vector3<GridCell>& gridCells, int sideIndex)
 {
 	mv::forEach<GridCell>([&](GridCell& cell) {
-		cell.parent = cell.sideParents[sideIndex];
+		MeshBox* parent = cell.sideParents[sideIndex];
+		cell.parent = parent;
+		parent->children.push_back(cell);
 	}, gridCells);
 }

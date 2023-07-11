@@ -197,6 +197,7 @@ void removeMeshBoxCells(
 		if(test(box.dims, cell->position))
 		{
 			removal.push_back(cell);
+			box.sideChanged[sideIndex] = true;
 			cell->sideParents[sideIndex] = nullptr;
 		}
 	}
@@ -300,6 +301,8 @@ void addCellsToMeshBox(
 	MeshBox& box,
 	const Vector3D& a, const Vector3D& b) 
 {
+	box.sideChanges[gridCells.sideIndex] = true;
+
     for(int x = a.x; x < b.x; x++) 
 	{
         for(int y = a.y; y < b.y; y++) 
@@ -560,8 +563,8 @@ void mergeIterate(
 		
 		std::cout << "Best path: " << best.index << " (" << best.score << ")" << std::endl;
 
-		assignAsParent(gridCells, best.index);
-		
+		clearMeshBoxChildren(meshbox);
+		assignParents(gridCells, best.index);
 
 		++iteration;
 	}
