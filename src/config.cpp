@@ -132,9 +132,39 @@ void validateOutputDir(std::string_view outputDir)
 		throw std::runtime_error("--out required to be a directory name!");
 }
 
+void validateNumPrinters(int numPrinters)
+{
+	if(numPrinters <= 0)
+		throw std::runtime_error("--num required to be a positive integer!");
+}
+
+void printUsage() {
+	std::cout << "Usage: parallelobox [OPTIONS]" << std::endl;
+	std::cout << std::endl;
+	std::cout << "Options:" << std::endl;
+	std::cout << "  --in <file>          Path to an input model to process." << std::endl;
+	std::cout << "  --out <directory>    The directory to store the partitioned models." << std::endl;
+	std::cout << "  --num <printers>     Number of printers available." << std::endl;
+	std::cout << "  --printer <file>     Load printer settings from <file>." << std::endl;
+	std::cout << "                       [default: \"printers/default.ini\"]." << std::endl;
+	std::cout << "  --infill <rate>      Infill rate (1.0 = 100%, 0.5 = 50%)." << std::endl;
+	std::cout << "  --help               Print this usage documentation." << std::endl;
+	std::cout << std::endl;
+	std::cout << "Options --in, --num, and --out are mandatory." << std::endl;
+	std::cout << std::endl;
+	std::cout << "For bug reporting and enquiries, please see:" << std::endl;
+	std::cout << "<http://www.hayleyhatton.co.uk/contact.htm>." << std::endl;
+}
+
 Config handleArguments(const Arguments& args) 
 {
 	Config config;
+
+	if(args.count(false) <= 0 || args.getFlag("--help"))
+	{
+		printUsage();
+		exit(EXIT_SUCCESS);
+	}
 
 	auto inputFile = args.get("--in");
 	if(inputFile)
@@ -144,12 +174,18 @@ Config handleArguments(const Arguments& args)
 	if(outputDir)
 		config.outputDir = *outputDir;
 
+	int numPrinters = -1;	// Require this from the user
+	auto numPrintersArg = args.getInt("--num");
+	if(numPrintersArg)
+		numPrinters = *numPrintersArg;
+	config.numPrinters = numPrinters;
+
 	std::string printerConfigFile("printers/default.ini");
 	auto printerConfigPath = args.get("--printer");
 	if(printerConfigPath)
 		printerConfigFile = *printerConfigPath;
 
-	float infillRate = 0.2;
+	float infillRate = 0.2;		// 20% as default
 	auto infillRateArg = args.getFloat("--infill");
 	if(infillRateArg)
 		infillRate = *infillRateArg;
@@ -160,6 +196,7 @@ Config handleArguments(const Arguments& args)
 
 	validateInputFile(config.inputFile);
 	validateOutputDir(config.outputDir);
+	validateNumPrinters(config.numPrinters);
 
 	return config;
 }
@@ -186,4 +223,6 @@ void printConfig(const Config& config)
 		      << printer.overhangTolerance << "°" << std::endl;
 
 	std::cout << "Infill rate: " << config.infillRate * 100 << "\%" << std::endl;
+
+	std::cout << "Number of printers: " << config.numPrinters << std::endl;
 }

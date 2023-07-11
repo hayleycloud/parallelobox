@@ -20,7 +20,9 @@ struct Config
 	std::string inputFile;
 	std::string outputDir;
 
-	PrinterSpec printer;	
+	PrinterSpec printer;
+
+	int numPrinters;
 
 	double infillRate;
 };

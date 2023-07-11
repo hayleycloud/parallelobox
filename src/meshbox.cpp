@@ -1,5 +1,9 @@
 #include "meshbox.h"
 
+//GridCell::GridCell()
+//{
+//}
+
 GridCell::ContentType determineContentType(
 	const Mesh& mesh, 
 	const Mesh& surfMesh, 
@@ -46,11 +50,11 @@ void getSurfaceBoxes(
 					mesh, surfMesh, volMesh, x, y, z);
 
 				gridCells[z][y][x] = (GridCell) { 
-					Vector(x, y, z),
+					Vector3D(x, y, z),
 					contentType == GridCell::ContentType::Boundary ?
 						volMesh : surfMesh, 
 					nullptr, 
-					std::array<MeshBox*,6>(),
+					std::array<MeshBox*,NUM_SIDES>(),
 					contentType 
 				};
 
@@ -58,12 +62,13 @@ void getSurfaceBoxes(
 				{
 					meshBoxes.push_back((MeshBox) {
 						volMesh, 
+						Cuboid(Vector3D(x, y, z), Vector3D(1, 1, 1)),
 						{ std::addressof(gridCells[z][y][x]) }, 
-						Cuboid(Vector(x, y, z), Vector(1, 1, 1))
+						std::array<bool,NUM_SIDES>()
 					});
 
 					gridCells[z][y][x].parent = std::addressof(meshBoxes.back());
-					for(auto& sideParent: gridCells[z][y][x].parents)
+					for(auto& sideParent: gridCells[z][y][x].sideParents)
 						sideParent = gridCells[z][y][x].parent;
 				}
 			}
@@ -71,3 +76,25 @@ void getSurfaceBoxes(
 	}
 }
 
+void extractUniqueMeshBoxes(
+	mv::vector3<GridCell>& gridCells, 
+	std::list<MeshBox*>& meshBoxes,
+	int sideIndex)
+{
+	std::set<MeshBox*> meshBoxSet;
+	
+	mv::forEach<GridCell>([&](GridCell& cell) {
+		MeshBox* parent = cell.sideParents[sideIndex];
+		if(parent)
+			meshBoxSet.insert(parent);
+	}, gridCells);
+
+	std::copy(meshBoxSet.begin(), meshBoxSet.end(), std::back_inserter(meshBoxes));
+}
+
+void assignAsParent(mv::vector3<GridCell>& gridCells, int sideIndex)
+{
+	mv::forEach<GridCell>([&](GridCell& cell) {
+		cell.parent = cell.sideParents[sideIndex];
+	}, gridCells);
+}

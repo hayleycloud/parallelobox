@@ -12,6 +12,12 @@ Arguments::Arguments(int argc, const char** argv)
 		m_ArgSet.push_back(argv[i]);
 }
 
+size_t Arguments::count(bool inclPath) const
+{
+	const int pathShift = inclPath ? 0 : -1;
+	return m_ArgSet.size() + pathShift;
+}
+
 std::optional<std::string> Arguments::get(std::string_view arg) const
 {
 	auto argIter = std::find(m_ArgSet.cbegin(), m_ArgSet.cend(), arg);

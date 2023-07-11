@@ -23,7 +23,7 @@ void normalizeSpherical(double* variate)
 		*variate -= 1.0;
 }
 
-const K::Vector_3 normalize(const K::Vector_3& v)
+const K::Vector_3 normalize2(const K::Vector_3& v)
 {
 	double l = sqrt(v.squared_length());
 	return K::Vector_3(v.x() / l, v.y() / l, v.z() / l);
@@ -291,5 +291,38 @@ void findSymmetries(
 
 	for(const auto& n: normals)
 		planes->push_back(hardPlane(centroid, n.first.n));
+}
+
+void symmetrySplit(
+	const Mesh& mesh, const K::Plane_3& plane, Mesh* outLeft, Mesh* outRight)
+{
+	*outLeft = Mesh(mesh);
+	CGAL::Polygon_mesh_processing::clip(
+		*outLeft, plane, 
+		CGAL::Polygon_mesh_processing::parameters::clip_volume(true));
+
+	*outRight = Mesh(mesh);
+	CGAL::Polygon_mesh_processing::clip(
+		*outRight, plane.opposite(), 
+		CGAL::Polygon_mesh_processing::parameters::clip_volume(true));
+}
+
+bool symmetrySplit(const Mesh& mesh, Mesh* outLeft, Mesh* outRight)
+{
+	// Find best symmetry
+	std::vector<HardPlane> planes;
+	findSymmetries(mesh, &planes);
+
+	// Do nothing if no suitable symmetries detected
+	if(planes.size() < 1)
+		return false;
+
+	const HardPlane& bestPlane = planes[0];
+
+	// Split with the best symmetry!
+	symmetrySplit(
+		mesh, K::Plane_3(bestPlane.first, bestPlane.second), outLeft, outRight);
+
+	return true;
 }
 

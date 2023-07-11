@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Dependencies
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(CGAL REQUIRED COMPONENTS Core)
 find_package(OpenMP)
 
@@ -16,6 +17,15 @@ if(USE_DEBUG)
 	add_definitions(-DDEBUG)
 endif()
 
-add_executable(parallelobox src/main.cpp src/args.cpp src/config.cpp src/grid_cut.cpp src/symmetry.cpp src/meshbox.cpp)
-target_link_libraries(parallelobox CGAL::CGAL CGAL::CGAL_Core OpenMP::OpenMP_CXX)
+add_executable(parallelobox 
+	src/main.cpp 
+	src/args.cpp 
+	src/config.cpp 
+	src/grid_cut.cpp 
+	src/align.cpp 
+	src/objective.cpp
+	src/symmetry.cpp 
+	src/meshbox.cpp
+	src/blockmerge.cpp)
+target_link_libraries(parallelobox Eigen3::Eigen CGAL::CGAL CGAL::CGAL_Core OpenMP::OpenMP_CXX)
 
