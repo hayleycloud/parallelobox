@@ -112,7 +112,7 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 				return &meshBox;
 	}, meshBoxes);*/
 
-	mergeIterate(config, gridCells, meshBoxes);
+	mergeIterate(config, mesh, grid, gridCells, meshBoxes);
 }
 
 int run(int argc, const char* argv[])

@@ -20,6 +20,14 @@ public:
 
 	size_t getThickness() const { return m_Thickness; }
 
+	double getXStepSize() const { return m_XStep; }
+
+	double getYStepSize() const { return m_YStep; }
+
+	double getZStepSize() const { return m_ZStep; }
+
+	const K::Point_3& getOrigin() const { return m_Origin; }
+
 	const auto& get() const { return m_Grid; }
 
 	const K::Iso_cuboid_3& get(size_t x, size_t y, size_t z) const;
@@ -41,6 +49,8 @@ public:
 private:
 	const size_t m_Width, m_Height, m_Thickness;
 	const size_t m_ZStride, m_YStride;
+	const double m_XStep, m_YStep, m_ZStep;
+	const K::Point_3 m_Origin;
 	std::vector<K::Iso_cuboid_3> m_Grid;
 
 	size_t getOffset(size_t x, size_t y, size_t z) const;

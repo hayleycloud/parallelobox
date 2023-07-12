@@ -301,7 +301,7 @@ void addCellsToMeshBox(
 	MeshBox& box,
 	const Vector3D& a, const Vector3D& b) 
 {
-	box.sideChanges[gridCells.sideIndex] = true;
+	box.sideChanged[gridCells.sideIndex] = true;
 
     for(int x = a.x; x < b.x; x++) 
 	{
@@ -483,11 +483,15 @@ SideScore bestSideScore(
 	return (SideScore){ bestScoreIndex, bestScore };
 }
 
+
+
 /**
  * TODO: Recompute mesh box list after iteration for next iteration.
  */
 void mergeIterate(
 	const Config& config, 
+	const Mesh& parent,
+	const Grid& grid,
 	mv::vector3<GridCell>& gridCells, 
 	std::list<MeshBox>& meshBoxes)
 {
@@ -563,8 +567,20 @@ void mergeIterate(
 		
 		std::cout << "Best path: " << best.index << " (" << best.score << ")" << std::endl;
 
-		clearMeshBoxChildren(meshbox);
+		for(MeshBox& box: meshBoxes) 
+		{
+			clearMeshBoxChildren(box);
+		}
 		assignParents(gridCells, best.index);
+		meshBoxes.remove_if([](const MeshBox& box) {
+			return box.children.empty();
+		});
+
+		for(MeshBox& box: meshBoxes)
+		{
+			if(box.sideChanged[best.index])
+				clipFromMesh(grid, parent, box);
+		}
 
 		++iteration;
 	}

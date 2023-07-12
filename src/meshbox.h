@@ -40,6 +40,8 @@ void getSurfaceBoxes(
 	mv::vector3<GridCell>& gridCells, 
 	std::list<MeshBox>& meshBoxes);
 
+void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child);
+
 void extractUniqueMeshBoxes(
 	mv::vector3<GridCell>& gridCells, 
 	std::list<MeshBox*>& meshBoxes,

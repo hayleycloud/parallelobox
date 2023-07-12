@@ -6,14 +6,12 @@ Grid::Grid(
 	double width, double height, double thickness,
 	size_t xElements, size_t yElements, size_t zElements)
 : m_Width(xElements), m_Height(yElements), m_Thickness(zElements),
-  m_ZStride(xElements * yElements), m_YStride(xElements)
+  m_ZStride(xElements * yElements), m_YStride(xElements),
+  m_XStep(width / static_cast<double>(xElements)),
+  m_YStep(height / static_cast<double>(yElements)),
+  m_ZStep(thickness / static_cast<double>(zElements)),
+  m_Origin(width * -0.5, height * -0.5, thickness * -0.5)
 {
-	const K::Point_3 origin(width * -0.5, height * -0.5, thickness * -0.5);
-
-	const double xStep = width / static_cast<double>(xElements);
-	const double yStep = height / static_cast<double>(yElements);
-	const double zStep = thickness / static_cast<double>(zElements);
-
 	m_Grid.reserve(xElements * yElements * zElements);
 
 	for(size_t z = 0; z < zElements; ++z)
@@ -23,13 +21,13 @@ Grid::Grid(
 			for(size_t x = 0; x < xElements; ++x)
 			{
 				K::Vector_3 currOffset = 
-					K::Vector_3(x * xStep, y * yStep, z * zStep);
+					K::Vector_3(x * m_XStep, y * m_YStep, z * m_ZStep);
 				K::Vector_3 nextOffset = 
-					K::Vector_3((x+1) * xStep, (y+1) * yStep, (z+1) * zStep);
+					K::Vector_3((x+1) * m_XStep, (y+1) * m_YStep, (z+1) * m_ZStep);
 
 				m_Grid.push_back(CGAL::Iso_cuboid_3<K>(
-					origin + currOffset, 
-					origin + nextOffset));
+					m_Origin + currOffset, 
+					m_Origin + nextOffset));
 
 				std::cout << "min: " << m_Grid.back().min() 
 					      << ", max: " << m_Grid.back().max()

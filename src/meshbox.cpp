@@ -76,17 +76,24 @@ void getSurfaceBoxes(
 	}
 }
 
-const K::Iso_cuboid_3 cuboidFrom(MeshBox& meshbox)
+void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child)
 {
-	K::Vector_3 origin(meshbox.origin.x, meshbox.origin.y, meshbox.origin.z);
-	K::Vector_3 size(meshbox.size.x, meshbox.size.y, meshbox.size.z);
+	const Cuboid& mbDims = child.dims;
+	const K::Point_3& origin = grid.getOrigin();
+	const K::Point_3 meshOrigin(
+		origin.x() + (mbDims.origin.x * grid.getXStepSize()),
+		origin.y() + (mbDims.origin.y * grid.getYStepSize()),
+		origin.z() + (mbDims.origin.z * grid.getZStepSize()));
+	const K::Vector_3 meshSize(
+		(mbDims.size.x + 1) * grid.getXStepSize(),
+		(mbDims.size.y + 1) * grid.getYStepSize(),
+		(mbDims.size.z + 1) * grid.getZStepSize());
+	const K::Point_3 meshEnd = meshOrigin + meshSize;
 
-	return CGAL::Iso_cuboid_3<K>(origin, origin + size);
-}
+	const CGAL::Iso_cuboid_3<K> bbox(meshOrigin, meshEnd);
 
-void clipFromMesh(Mesh& mesh, MeshBox& child)
-{
-	PMP::clip(mesh, cuboidFrom(child), CGAL::parameters::clip_volume(true));
+	child.mesh = mesh;
+	PMP::clip(child.mesh, bbox, CGAL::parameters::clip_volume(true));
 }
 
 void extractUniqueMeshBoxes(
@@ -107,7 +114,7 @@ void extractUniqueMeshBoxes(
 
 void clearMeshBoxChanges(MeshBox& meshbox)
 {
-	std::fill(meshbox.sideChanges.begin(), meshbox.sideChanges.end(), false);
+	std::fill(meshbox.sideChanged.begin(), meshbox.sideChanged.end(), false);
 }
 
 void clearMeshBoxChildren(MeshBox& meshbox)
@@ -120,6 +127,6 @@ void assignParents(mv::vector3<GridCell>& gridCells, int sideIndex)
 	mv::forEach<GridCell>([&](GridCell& cell) {
 		MeshBox* parent = cell.sideParents[sideIndex];
 		cell.parent = parent;
-		parent->children.push_back(cell);
+		parent->children.push_back(std::addressof(cell));
 	}, gridCells);
 }
