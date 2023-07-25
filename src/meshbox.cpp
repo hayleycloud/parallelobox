@@ -92,6 +92,8 @@ void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child)
 
 	const CGAL::Iso_cuboid_3<K> bbox(meshOrigin, meshEnd);
 
+	std::cout << "Clipping using " << meshOrigin << ", " << meshEnd << std::endl;
+
 	child.mesh = mesh;
 	PMP::clip(child.mesh, bbox, CGAL::parameters::clip_volume(true));
 }
@@ -126,6 +128,8 @@ void assignParents(mv::vector3<GridCell>& gridCells, int sideIndex)
 {
 	mv::forEach<GridCell>([&](GridCell& cell) {
 		MeshBox* parent = cell.sideParents[sideIndex];
+		if(parent == nullptr)
+			return;
 		cell.parent = parent;
 		parent->children.push_back(std::addressof(cell));
 	}, gridCells);

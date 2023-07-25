@@ -6,6 +6,10 @@ project(parallelobox)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Make Fast
+#set(CMAKE_CXX_FLAGS "-Wall -Wextra")
+#set(CMAKE_CXX_FLAGS_DEBUG "-g -O3")
+
 # Dependencies
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(CGAL REQUIRED COMPONENTS Core)

@@ -42,6 +42,14 @@ bool getAdjacentBoxIfExists(
 	int x, int y, int z,
 	std::unordered_set<MeshBox*>& meshboxes)
 {
+	if(x < 0 || y < 0 || z < 0 || 
+		x >= gridCells.cells[0][0].size() ||
+		y >= gridCells.cells[0].size() ||
+		z >= gridCells.cells.size())
+	{
+		return false;
+	}
+
 	GridCell& cell = mv::get(gridCells.cells, x, y, z);
 	if(cell.type == GridCell::ContentType::Boundary)
 	{
@@ -155,12 +163,15 @@ void exploreBranches(
 	auto adjBoxes = getAdjacentBoxes(gridCells, box, direction);
 	for(auto adjBox: adjBoxes)
 	{
-		if(nodeAlreadyVisited(*adjBox, adjacencyBranches))
+		if(nodeAlreadyVisited(*adjBox, adjacencyBranches)) {
+			std::cout << "Node already visited." << std::endl;
 			adjBoxes.erase(adjBox);
+		}
 	}
 
 	if(adjBoxes.size() == 0)
 	{
+		std::cout << "No adjacent boxes." << std::endl;
 		adjacencyBranches.emplace_back((AdjacencyBranch){
 			std::addressof(box), nullptr, 
 			determineOptimumShrinkDirection(direction),
@@ -172,6 +183,7 @@ void exploreBranches(
 	std::vector<Direction> directions;
 	for(auto adjBox: adjBoxes)
 	{
+		std::cout << "Adjacent Box found" << std::endl;
 		adjacencyBranches.emplace_back((AdjacencyBranch){
 			std::addressof(box), adjBox, 
 			determineOptimumShrinkDirection(direction),
@@ -215,6 +227,8 @@ bool shrink(GridPathed& gridCells, MeshBox& box, Direction direction)
 	{
 		case Direction::Left:
 		{
+			std::cout << "Shrinking Left..." << std::endl;
+
 			removeMeshBoxCells(sideIndex, box, 
 				[&](const Cuboid& a, const Vector3D& pos) {
 					return a.origin.x == pos.x;
@@ -229,6 +243,8 @@ bool shrink(GridPathed& gridCells, MeshBox& box, Direction direction)
 		break;                                                      
 		case Direction::Right:                                          
 		{
+			std::cout << "Shrinking Right..." << std::endl;
+
 			removeMeshBoxCells(sideIndex, box, 
 				[&](const Cuboid& a, const Vector3D& pos) {
 					return (a.origin.x + (a.size.x - 1)) == pos.x;
@@ -241,6 +257,8 @@ bool shrink(GridPathed& gridCells, MeshBox& box, Direction direction)
 		break;                                                 
 		case Direction::Up:                                             
 		{
+			std::cout << "Shrinking Up..." << std::endl;
+
 			removeMeshBoxCells(sideIndex, box, 
 				[&](const Cuboid& a, const Vector3D& pos) {
 					return (a.origin.y + (a.size.y - 1)) == pos.y;
@@ -253,6 +271,8 @@ bool shrink(GridPathed& gridCells, MeshBox& box, Direction direction)
 		break;                                                      
 		case Direction::Down:                                           
 		{
+			std::cout << "Shrinking Down..." << std::endl;
+
 			removeMeshBoxCells(sideIndex, box, 
 				[&](const Cuboid& a, const Vector3D& pos) {
 					return a.origin.y == pos.y;
@@ -267,6 +287,8 @@ bool shrink(GridPathed& gridCells, MeshBox& box, Direction direction)
 		break;                                                      
 		case Direction::In:                                             
 		{
+			std::cout << "Shrinking In..." << std::endl;
+
 			removeMeshBoxCells(sideIndex, box, 
 				[&](const Cuboid& a, const Vector3D& pos) {
 					return (a.origin.z + (a.size.z - 1)) == pos.z;
@@ -279,6 +301,8 @@ bool shrink(GridPathed& gridCells, MeshBox& box, Direction direction)
 		break;                                                      
 		case Direction::Out:                                            
 		{
+			std::cout << "Shrinking Out..." << std::endl;
+
 			removeMeshBoxCells(sideIndex, box, 
 				[&](const Cuboid& a, const Vector3D& pos) {
 					return a.origin.z == pos.z;
@@ -326,6 +350,8 @@ void grow(GridPathed& gridCells, MeshBox& box, Direction direction)
 	{
 		case Direction::Left:
 		{
+			std::cout << "Growing Left..." << std::endl;
+
 			--box.dims.origin.x;
 			++box.dims.size.x;
 
@@ -337,6 +363,8 @@ void grow(GridPathed& gridCells, MeshBox& box, Direction direction)
 		break;                                                      
 		case Direction::Right:                                          
 		{
+			std::cout << "Growing Right..." << std::endl;
+
 			++box.dims.size.x;
 
 			const Vector3D btmRightOut = 
@@ -348,6 +376,8 @@ void grow(GridPathed& gridCells, MeshBox& box, Direction direction)
 		break;                                                 
 		case Direction::Up:                                             
 		{
+			std::cout << "Growing Up..." << std::endl;
+
 			++box.dims.size.y;
 
 			const Vector3D topLeftOut = 
@@ -359,6 +389,8 @@ void grow(GridPathed& gridCells, MeshBox& box, Direction direction)
 		break;                                                      
 		case Direction::Down:                                           
 		{
+			std::cout << "Growing Down..." << std::endl;
+
 			--box.dims.origin.y;
 			++box.dims.size.y;
 
@@ -370,6 +402,8 @@ void grow(GridPathed& gridCells, MeshBox& box, Direction direction)
 		break;                                                      
 		case Direction::In:                                             
 		{
+			std::cout << "Growing In..." << std::endl;
+
 			++box.dims.size.z;
 
 			const Vector3D btmLeftIn = 
@@ -381,6 +415,8 @@ void grow(GridPathed& gridCells, MeshBox& box, Direction direction)
 		break;                                                      
 		case Direction::Out:                                            
 		{
+			std::cout << "Growing Out..." << std::endl;
+
 			--box.dims.origin.z;
 			++box.dims.size.z;
 
@@ -504,6 +540,9 @@ void mergeIterate(
 		for(auto itr = meshBoxes.begin(); itr != meshBoxes.end(); ++itr)
 		{
 			auto& meshBox = *itr;
+			if(!meshBox.mesh.is_valid())
+				std::cerr << "Mesh is not valid!" << std::endl;
+
 			meshboxCosts.push_back(std::make_pair(
 				std::addressof(meshBox), fitness(config, meshBox.mesh)));
 		}
@@ -547,6 +586,10 @@ void mergeIterate(
 			for(auto itr = sideInstances[sideIndex].begin(); itr != sideInstances[sideIndex].end(); ++itr)
 			{
 				auto meshBox = *itr;
+
+				if(meshBox->mesh.is_empty())
+					std::cerr << "Mesh is not valid!" << std::endl;
+
 				//std::cout << "meshBox: " << meshBox << std::endl;
 				mbSideCosts.push_back(std::make_pair(
 					meshBox, fitness(config, meshBox->mesh)));
@@ -571,10 +614,13 @@ void mergeIterate(
 		{
 			clearMeshBoxChildren(box);
 		}
+		std::cout << "hi1" << std::endl;
 		assignParents(gridCells, best.index);
+		std::cout << "hi2" << std::endl;
 		meshBoxes.remove_if([](const MeshBox& box) {
 			return box.children.empty();
 		});
+		std::cout << "hi3" << std::endl;
 
 		for(MeshBox& box: meshBoxes)
 		{
