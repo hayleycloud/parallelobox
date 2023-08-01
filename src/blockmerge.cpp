@@ -54,6 +54,7 @@ bool getAdjacentBoxIfExists(
 	if(cell.type == GridCell::ContentType::Boundary)
 	{
 		assert(cell.parent);
+		std::cout << "If Exists: " << cell.sideParents[gridCells.sideIndex] << std::endl;
 		meshboxes.insert(cell.sideParents[gridCells.sideIndex]);
 		return true;
 	}
@@ -140,12 +141,12 @@ AdjacencyBranch::Type toggleType(AdjacencyBranch::Type type)
 }
 
 bool nodeAlreadyVisited(
-	MeshBox& node,
+	MeshBox* node,
 	const std::vector<AdjacencyBranch>& adjacencyBranches)
 {
 	for(const AdjacencyBranch& branch: adjacencyBranches)
 	{
-		if(branch.parent == std::addressof(node))
+		if(branch.parent == node)
 			return true;
 	}
 	return false;
@@ -158,16 +159,22 @@ void exploreBranches(
 	Direction direction,
 	AdjacencyBranch::Type type = AdjacencyBranch::Type::Expand)
 {
+	std::cout << "Exploring branch..." << std::endl;
+
 	AdjacencyBranch::Type nextType = toggleType(type);
 
+	std::vector<MeshBox*> removals;
 	auto adjBoxes = getAdjacentBoxes(gridCells, box, direction);
-	for(auto adjBox: adjBoxes)
+	for(MeshBox* adjBox: adjBoxes)
 	{
-		if(nodeAlreadyVisited(*adjBox, adjacencyBranches)) {
+		if(nodeAlreadyVisited(adjBox, adjacencyBranches)) {
 			std::cout << "Node already visited." << std::endl;
-			adjBoxes.erase(adjBox);
+			removals.push_back(adjBox);
 		}
 	}
+
+	for(MeshBox* removal: removals)
+		adjBoxes.erase(removal);
 
 	if(adjBoxes.size() == 0)
 	{
@@ -181,7 +188,7 @@ void exploreBranches(
 	}
 
 	std::vector<Direction> directions;
-	for(auto adjBox: adjBoxes)
+	for(MeshBox* adjBox: adjBoxes)
 	{
 		std::cout << "Adjacent Box found" << std::endl;
 		adjacencyBranches.emplace_back((AdjacencyBranch){
@@ -191,8 +198,9 @@ void exploreBranches(
 		});
 	}
 
-	for(auto adjBox: adjBoxes)
+	for(MeshBox* adjBox: adjBoxes)
 	{
+		std::cout << "AdjBox = " << adjBox << std::endl;
 		exploreBranches(
 			gridCells, adjacencyBranches, *adjBox, direction, nextType);
 	}
@@ -497,19 +505,20 @@ bool shouldIterateAgain(
 struct SideScore
 {
 	unsigned int index;
-	int score;
+	double score;
 };
 
 SideScore bestSideScore(
-	const std::unordered_map<unsigned int,int>& sideIndexScores)
+	const std::unordered_map<unsigned int,double>& sideIndexScores)
 {
 	unsigned int bestScoreIndex;
-	int bestScore = -1;
+	double bestScore = std::numeric_limits<double>::max();
 
 	for(unsigned int sideIndex = 0; sideIndex < NUM_SIDES; ++sideIndex)
 	{
 		int score = sideIndexScores.at(sideIndex);
-		if(score > bestScore)
+		std::cout << "index: " << score << std::endl;
+		if(score < bestScore)
 		{
 			bestScoreIndex = sideIndex;
 			bestScore = score;
@@ -567,7 +576,7 @@ void mergeIterate(
 			Direction::In, Direction::Out
 		};
 
-		std::unordered_map<unsigned int,int> sidePathScores;
+		std::unordered_map<unsigned int,double> sidePathScores;
 
 		//#pragma omp parallel for
 		for(unsigned int sideIndex = 0; sideIndex < NUM_SIDES; ++sideIndex)
@@ -587,13 +596,19 @@ void mergeIterate(
 			{
 				auto meshBox = *itr;
 
+				//std::cout << "side instance" << std::endl;
+
 				if(meshBox->mesh.is_empty())
 					std::cerr << "Mesh is not valid!" << std::endl;
 
 				//std::cout << "meshBox: " << meshBox << std::endl;
-				mbSideCosts.push_back(std::make_pair(
-					meshBox, fitness(config, meshBox->mesh)));
+				auto meshBoxCost = std::make_pair(
+					meshBox, fitness(config, meshBox->mesh));
+				if(meshBoxCost.second > 0.0)
+					mbSideCosts.push_back(meshBoxCost);
 				//std::cout << "fitness" << std::endl;
+
+
 			}
 
 			// Sort the meshboxes such that highest cost is first

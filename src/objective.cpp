@@ -15,6 +15,7 @@ double printingCost(const Config& config, const Mesh& mesh)
 	const double volumeCost = config.printer.infillSpeed * PMP::volume(mesh);
 	const double surfaceCost = config.printer.shellSpeed * PMP::area(mesh);
 	// TODO: squared_face_area for improved performance?
+	std::cout << "V: " << volumeCost << ", SA: " << surfaceCost << " = " << volumeCost + surfaceCost << std::endl;
 	return volumeCost + surfaceCost;
 }
 
@@ -32,10 +33,16 @@ double fitsVolumeCost(const Config& config, const Mesh& mesh)
 	   depth < config.printer.volume.depth)
 		return 0.0;
 	else
-		return std::numeric_limits<double>::max();
+		return 1000000.0;
 }
 
 double fitness(const Config& config, const Mesh& mesh)
 {
-	return printingCost(config, mesh) + fitsVolumeCost(config, mesh);
+	const double printCost = printingCost(config, mesh);
+	if(printCost == 0.0)
+		return 0.0;
+
+	const double fitVolumeCost = fitsVolumeCost(config, mesh);
+
+	return printCost + fitVolumeCost;
 }

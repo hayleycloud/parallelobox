@@ -131,6 +131,10 @@ void assignParents(mv::vector3<GridCell>& gridCells, int sideIndex)
 		if(parent == nullptr)
 			return;
 		cell.parent = parent;
+		
+		for(auto& sideParent: cell.sideParents)
+			sideParent = parent;
+
 		parent->children.push_back(std::addressof(cell));
 	}, gridCells);
 }
