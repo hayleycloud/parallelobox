@@ -1,5 +1,6 @@
 #include "objective.h"
 #include "align.h"
+#include "debug.h"
 
 double overhangCost(
 	const Config& config, 
@@ -15,7 +16,7 @@ double printingCost(const Config& config, const Mesh& mesh)
 	const double volumeCost = config.printer.infillSpeed * PMP::volume(mesh);
 	const double surfaceCost = config.printer.shellSpeed * PMP::area(mesh);
 	// TODO: squared_face_area for improved performance?
-	std::cout << "V: " << volumeCost << ", SA: " << surfaceCost << " = " << volumeCost + surfaceCost << std::endl;
+	//DEBUG_EXEC(std::cout << "V: " << volumeCost << ", SA: " << surfaceCost << " = " << volumeCost + surfaceCost << std::endl);
 	return volumeCost + surfaceCost;
 }
 

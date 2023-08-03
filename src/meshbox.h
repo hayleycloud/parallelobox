@@ -28,7 +28,7 @@ struct MeshBox
 {
 	Mesh mesh;
 	Cuboid dims;
-	std::list<GridCell*> children;
+	std::vector<GridCell*> children;
 	
 	//K::Iso_cuboid_3 dims;
 	std::array<bool,NUM_SIDES> sideChanged;
@@ -40,11 +40,24 @@ void getSurfaceBoxes(
 	mv::vector3<GridCell>& gridCells, 
 	std::list<MeshBox>& meshBoxes);
 
+void getChildrenFromSide(
+	mv::vector3<GridCell>& gridCells, 
+	MeshBox* meshBox, 
+	std::vector<GridCell*>& children, 
+	int sideIndex);
+
 void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child);
 
-void extractUniqueMeshBoxes(
+void getUniqueMeshBoxes(
 	mv::vector3<GridCell>& gridCells, 
-	std::list<MeshBox*>& meshBoxes,
+	std::vector<MeshBox*>& meshBoxes,
+	int sideIndex);
+
+void extractUniqueMeshBoxes(
+	const Grid& grid,
+	mv::vector3<GridCell>& gridCells,
+	const Mesh& parentMesh,
+	std::vector<MeshBox>& meshBoxes,
 	int sideIndex);
 
 void clearMeshBoxChanges(MeshBox& meshbox);

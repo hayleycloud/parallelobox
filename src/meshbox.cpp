@@ -60,6 +60,7 @@ void getSurfaceBoxes(
 
 				if(contentType == GridCell::ContentType::Boundary)
 				{
+                    #pragma omp critical
 					meshBoxes.push_back((MeshBox) {
 						volMesh, 
 						Cuboid(Vector3D(x, y, z), Vector3D(1, 1, 1)),
@@ -74,6 +75,46 @@ void getSurfaceBoxes(
 			}
 		}
 	}
+}
+
+Cuboid getDimsFrom(std::vector<GridCell*>& children)
+{
+	constexpr int MAX_INT = std::numeric_limits<int>::max();
+	constexpr int MIN_INT = std::numeric_limits<int>::min();
+	Vector3D min(MAX_INT, MAX_INT, MAX_INT), max(MIN_INT, MIN_INT, MIN_INT);
+	for(GridCell* child: children)
+	{
+		if(child->position.x < min.x)
+			min.x = child->position.x;
+		if(child->position.x > max.x)
+			max.x = child->position.x;
+		
+		if(child->position.y < min.y)
+			min.y = child->position.y;
+		if(child->position.y > max.y)
+			max.y = child->position.y;
+
+		if(child->position.z < min.z)
+			min.z = child->position.z;
+		if(child->position.z > max.z)
+			max.z = child->position.z;
+	}
+
+	Vector3D size(max.x - min.x, max.y - min.y, max.z - min.z);
+
+	return Cuboid(min, size);
+}
+
+void getChildrenFromSide(
+	mv::vector3<GridCell>& gridCells, 
+	MeshBox* meshBox, 
+	std::vector<GridCell*>& children, 
+	int sideIndex)
+{
+	mv::forEach<GridCell>([&](GridCell& cell) {
+		if(cell.sideParents[sideIndex] == meshBox)
+			children.push_back(std::addressof(cell));
+	}, gridCells);
 }
 
 void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child)
@@ -92,15 +133,15 @@ void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child)
 
 	const CGAL::Iso_cuboid_3<K> bbox(meshOrigin, meshEnd);
 
-	std::cout << "Clipping using " << meshOrigin << ", " << meshEnd << std::endl;
+	//std::cout << "Clipping using " << meshOrigin << ", " << meshEnd << std::endl;
 
 	child.mesh = mesh;
 	PMP::clip(child.mesh, bbox, CGAL::parameters::clip_volume(true));
 }
 
-void extractUniqueMeshBoxes(
+void getUniqueMeshBoxes(
 	mv::vector3<GridCell>& gridCells, 
-	std::list<MeshBox*>& meshBoxes,
+	std::vector<MeshBox*>& meshBoxes,
 	int sideIndex)
 {
 	std::set<MeshBox*> meshBoxSet;
@@ -112,6 +153,31 @@ void extractUniqueMeshBoxes(
 	}, gridCells);
 
 	std::copy(meshBoxSet.begin(), meshBoxSet.end(), std::back_inserter(meshBoxes));
+}
+
+void extractUniqueMeshBoxes(
+	const Grid& grid,
+	mv::vector3<GridCell>& gridCells,
+	const Mesh& parentMesh,
+	std::vector<MeshBox>& meshBoxes,
+	int sideIndex)
+{
+	std::vector<MeshBox*> meshBoxPtrs;
+	getUniqueMeshBoxes(gridCells, meshBoxPtrs, sideIndex);
+
+	for(MeshBox* meshBoxPtr: meshBoxPtrs)
+	{
+		std::vector<GridCell*> children;
+		getChildrenFromSide(gridCells, meshBoxPtr, children, sideIndex);
+
+		Cuboid bbox = getDimsFrom(children);
+
+		MeshBox newBox = (MeshBox) {
+			Mesh(), bbox, children, std::array<bool,NUM_SIDES>()
+		};
+		clipFromMesh(grid, parentMesh, newBox);
+		meshBoxes.push_back(newBox);
+	}
 }
 
 void clearMeshBoxChanges(MeshBox& meshbox)

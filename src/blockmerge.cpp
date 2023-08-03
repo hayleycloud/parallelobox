@@ -211,19 +211,19 @@ void removeMeshBoxCells(
 	MeshBox& box, 
 	std::function<bool(const Cuboid&,const Vector3D&)> test)
 {
-	std::vector<GridCell*> removal;
+//	std::vector<GridCell*> removal;
 	for(GridCell* cell: box.children)
 	{
 		if(test(box.dims, cell->position))
 		{
-			removal.push_back(cell);
+			//removal.push_back(cell);
 			box.sideChanged[sideIndex] = true;
 			cell->sideParents[sideIndex] = nullptr;
 		}
 	}
 
-	for(auto cell: removal)
-		box.children.remove(cell);
+//	for(auto cell: removal)
+//		box.children.remove(cell);
 }
 
 bool shrink(GridPathed& gridCells, MeshBox& box, Direction direction)
@@ -345,7 +345,7 @@ void addCellsToMeshBox(
 				assert(cell->sideParents[gridCells.sideIndex] == nullptr);
 
 				cell->sideParents[gridCells.sideIndex] = std::addressof(box);
-                box.children.push_back(cell);
+                //box.children.push_back(cell);
             }
         }
     }
@@ -517,7 +517,7 @@ SideScore bestSideScore(
 	for(unsigned int sideIndex = 0; sideIndex < NUM_SIDES; ++sideIndex)
 	{
 		int score = sideIndexScores.at(sideIndex);
-		std::cout << "index: " << score << std::endl;
+		std::cout << "Index " << sideIndex << ": " << score << std::endl;
 		if(score < bestScore)
 		{
 			bestScoreIndex = sideIndex;
@@ -569,7 +569,7 @@ void mergeIterate(
 		std::cout << "Target: " << prey << std::endl;
 
 		// TODO: Recalculate only altered mesh boxes?
-		std::array<std::list<MeshBox*>,NUM_SIDES> sideInstances;
+		std::array<std::vector<MeshBox>,NUM_SIDES> sideInstances;
 		std::array<Direction,NUM_SIDES> sideDirections = {
 			Direction::Left, Direction::Right,
 			Direction::Up, Direction::Down,
@@ -586,29 +586,26 @@ void mergeIterate(
 			GridPathed gridPath = {gridCells, sideIndex};
 			feed(gridPath, *prey, sideDirections[sideIndex]);
 
-			extractUniqueMeshBoxes(gridCells, sideInstances[sideIndex], sideIndex);
+			extractUniqueMeshBoxes(
+				grid, gridCells, parent, sideInstances[sideIndex], sideIndex);
 
 			// TODO: Um....? What about the side instances? We need to keep track
 			// of the best cost path available!
 
 			MeshBoxPtrCostList mbSideCosts; 
-			for(auto itr = sideInstances[sideIndex].begin(); itr != sideInstances[sideIndex].end(); ++itr)
+			for(MeshBox& meshBox: sideInstances[sideIndex])
 			{
-				auto meshBox = *itr;
-
 				//std::cout << "side instance" << std::endl;
 
-				if(meshBox->mesh.is_empty())
+				if(meshBox.mesh.is_empty())
 					std::cerr << "Mesh is not valid!" << std::endl;
 
 				//std::cout << "meshBox: " << meshBox << std::endl;
 				auto meshBoxCost = std::make_pair(
-					meshBox, fitness(config, meshBox->mesh));
+					std::addressof(meshBox), fitness(config, meshBox.mesh));
 				if(meshBoxCost.second > 0.0)
 					mbSideCosts.push_back(meshBoxCost);
 				//std::cout << "fitness" << std::endl;
-
-
 			}
 
 			// Sort the meshboxes such that highest cost is first
@@ -622,27 +619,32 @@ void mergeIterate(
 		}
 
 		SideScore best = bestSideScore(sidePathScores);
-		
+
 		std::cout << "Best path: " << best.index << " (" << best.score << ")" << std::endl;
 
-		for(MeshBox& box: meshBoxes) 
-		{
-			clearMeshBoxChildren(box);
-		}
-		std::cout << "hi1" << std::endl;
-		assignParents(gridCells, best.index);
-		std::cout << "hi2" << std::endl;
-		meshBoxes.remove_if([](const MeshBox& box) {
-			return box.children.empty();
-		});
-		std::cout << "hi3" << std::endl;
+		std::vector<MeshBox>& bestInst = sideInstances[best.index];
+		std::copy(bestInst.begin(), bestInst.end(), std::back_inserter(meshBoxes));
 
-		for(MeshBox& box: meshBoxes)
-		{
-			if(box.sideChanged[best.index])
-				clipFromMesh(grid, parent, box);
-		}
+		//for(MeshBox& box: meshBoxes) 
+		//{
+		//	clearMeshBoxChildren(box);
+		//}
+		//std::cout << "hi1" << std::endl;
+		//assignParents(gridCells, best.index);
+		//std::cout << "hi2" << std::endl;
+		//meshBoxes.remove_if([](const MeshBox& box) {
+		//	return box.children.empty();
+		//});
+		//std::cout << "hi3" << std::endl;
 
+		//for(MeshBox& box: meshBoxes)
+		//{
+		//	if(box.sideChanged[best.index])
+		//		clipFromMesh(grid, parent, box);
+		//}
+
+		int x;
+		std::cin >> x;
 		++iteration;
 	}
 }
