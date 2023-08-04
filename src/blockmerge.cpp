@@ -469,6 +469,8 @@ void feed(
 
 	applyBranchShrinks(gridCells, adjacencyBranches);
 	applyBranchGrows(gridCells, adjacencyBranches);
+
+	printParents(gridCells.cells, gridCells.sideIndex);
 }
 
 bool shouldIterateAgain(
@@ -540,6 +542,8 @@ void mergeIterate(
 	mv::vector3<GridCell>& gridCells, 
 	std::list<MeshBox>& meshBoxes)
 {
+	printParents(gridCells);
+
 	int iteration = 1;
 	while(shouldIterateAgain(config, meshBoxes))
 	{
@@ -619,9 +623,13 @@ void mergeIterate(
 		}
 
 		SideScore best = bestSideScore(sidePathScores);
+		assignParents(gridCells, best.index);
 
 		std::cout << "Best path: " << best.index << " (" << best.score << ")" << std::endl;
 
+		printParents(gridCells);
+
+		meshBoxes.clear();
 		std::vector<MeshBox>& bestInst = sideInstances[best.index];
 		std::copy(bestInst.begin(), bestInst.end(), std::back_inserter(meshBoxes));
 

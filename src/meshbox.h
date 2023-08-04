@@ -66,4 +66,7 @@ void clearMeshBoxChildren(MeshBox& meshbox);
 
 void assignParents(mv::vector3<GridCell>& gridCells, int sideIndex);
 
+void printParents(mv::vector3<GridCell>& gridCells);
+
+void printParents(mv::vector3<GridCell>& gridCells, int sideIndex);
 

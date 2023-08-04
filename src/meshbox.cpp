@@ -117,6 +117,13 @@ void getChildrenFromSide(
 	}, gridCells);
 }
 
+void reparentChildrenForSide(
+	std::vector<GridCell*>& children, MeshBox* parent, int sideIndex)
+{
+	for(GridCell* child: children)
+		child->sideParents[sideIndex] = parent;
+}
+
 void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child)
 {
 	const Cuboid& mbDims = child.dims;
@@ -147,9 +154,12 @@ void getUniqueMeshBoxes(
 	std::set<MeshBox*> meshBoxSet;
 	
 	mv::forEach<GridCell>([&](GridCell& cell) {
+		if(cell.type != GridCell::ContentType::Boundary)
+			return;
+
 		MeshBox* parent = cell.sideParents[sideIndex];
-		if(parent)
-			meshBoxSet.insert(parent);
+		assert(parent);
+		meshBoxSet.insert(parent);
 	}, gridCells);
 
 	std::copy(meshBoxSet.begin(), meshBoxSet.end(), std::back_inserter(meshBoxes));
@@ -166,6 +176,9 @@ void extractUniqueMeshBoxes(
 	getUniqueMeshBoxes(gridCells, meshBoxPtrs, sideIndex);
 
 	for(MeshBox* meshBoxPtr: meshBoxPtrs)
+		std::cout << "MeshBoxPtr: " << meshBoxPtr << std::endl;
+
+	for(MeshBox* meshBoxPtr: meshBoxPtrs)
 	{
 		std::vector<GridCell*> children;
 		getChildrenFromSide(gridCells, meshBoxPtr, children, sideIndex);
@@ -175,9 +188,12 @@ void extractUniqueMeshBoxes(
 		MeshBox newBox = (MeshBox) {
 			Mesh(), bbox, children, std::array<bool,NUM_SIDES>()
 		};
+		reparentChildrenForSide(children, std::addressof(newBox), sideIndex);
 		clipFromMesh(grid, parentMesh, newBox);
 		meshBoxes.push_back(newBox);
 	}
+
+	printParents(gridCells, sideIndex);
 }
 
 void clearMeshBoxChanges(MeshBox& meshbox)
@@ -193,14 +209,38 @@ void clearMeshBoxChildren(MeshBox& meshbox)
 void assignParents(mv::vector3<GridCell>& gridCells, int sideIndex)
 {
 	mv::forEach<GridCell>([&](GridCell& cell) {
-		MeshBox* parent = cell.sideParents[sideIndex];
-		if(parent == nullptr)
+		if(cell.type != GridCell::ContentType::Boundary)
 			return;
+
+		MeshBox* parent = cell.sideParents[sideIndex];
+		assert(parent);
 		cell.parent = parent;
 		
 		for(auto& sideParent: cell.sideParents)
 			sideParent = parent;
 
-		parent->children.push_back(std::addressof(cell));
+		//parent->children.push_back(std::addressof(cell));
+	}, gridCells);
+}
+
+void printParents(mv::vector3<GridCell>& gridCells)
+{
+	mv::forEach<GridCell>([&](GridCell& cell) {
+		if(cell.type != GridCell::ContentType::Boundary)
+			return;
+
+		std::cout << cell.parent << std::endl;
+		//parent->children.push_back(std::addressof(cell));
+	}, gridCells);
+}
+
+void printParents(mv::vector3<GridCell>& gridCells, int sideIndex)
+{
+	mv::forEach<GridCell>([&](GridCell& cell) {
+		if(cell.type != GridCell::ContentType::Boundary)
+			return;
+
+		std::cout << cell.sideParents[sideIndex] << std::endl;
+		//parent->children.push_back(std::addressof(cell));
 	}, gridCells);
 }
