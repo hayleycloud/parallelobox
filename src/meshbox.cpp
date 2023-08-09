@@ -25,7 +25,7 @@ void getSurfaceBoxes(
 	const Mesh& mesh, 
 	const Grid& grid, 
 	mv::vector3<GridCell>& gridCells, 
-	std::list<MeshBox>& meshBoxes)
+	std::list<std::unique_ptr<MeshBox>>& meshBoxes)
 {
 	gridCells.resize(grid.getThickness());
 	
@@ -61,14 +61,14 @@ void getSurfaceBoxes(
 				if(contentType == GridCell::ContentType::Boundary)
 				{
                     #pragma omp critical
-					meshBoxes.push_back((MeshBox) {
+					meshBoxes.emplace_back(std::make_unique<MeshBox>((MeshBox){
 						volMesh, 
 						Cuboid(Vector3D(x, y, z), Vector3D(1, 1, 1)),
 						{ std::addressof(gridCells[z][y][x]) }, 
 						std::array<bool,NUM_SIDES>()
-					});
+					}));
 
-					gridCells[z][y][x].parent = std::addressof(meshBoxes.back());
+					gridCells[z][y][x].parent = meshBoxes.back().get();
 					for(auto& sideParent: gridCells[z][y][x].sideParents)
 						sideParent = gridCells[z][y][x].parent;
 				}
@@ -169,14 +169,14 @@ void extractUniqueMeshBoxes(
 	const Grid& grid,
 	mv::vector3<GridCell>& gridCells,
 	const Mesh& parentMesh,
-	std::vector<MeshBox>& meshBoxes,
+	std::vector<std::unique_ptr<MeshBox>>& meshBoxes,
 	int sideIndex)
 {
 	std::vector<MeshBox*> meshBoxPtrs;
 	getUniqueMeshBoxes(gridCells, meshBoxPtrs, sideIndex);
 
-	for(MeshBox* meshBoxPtr: meshBoxPtrs)
-		std::cout << "MeshBoxPtr: " << meshBoxPtr << std::endl;
+	//for(MeshBox* meshBoxPtr: meshBoxPtrs)
+	//	std::cout << "MeshBoxPtr: " << meshBoxPtr << std::endl;
 
 	for(MeshBox* meshBoxPtr: meshBoxPtrs)
 	{
@@ -185,15 +185,15 @@ void extractUniqueMeshBoxes(
 
 		Cuboid bbox = getDimsFrom(children);
 
-		MeshBox newBox = (MeshBox) {
+		std::unique_ptr<MeshBox> newBox = std::make_unique<MeshBox>((MeshBox){
 			Mesh(), bbox, children, std::array<bool,NUM_SIDES>()
-		};
-		reparentChildrenForSide(children, std::addressof(newBox), sideIndex);
-		clipFromMesh(grid, parentMesh, newBox);
-		meshBoxes.push_back(newBox);
+		});
+		reparentChildrenForSide(children, newBox.get(), sideIndex);
+		clipFromMesh(grid, parentMesh, *newBox);
+		meshBoxes.push_back(std::move(newBox));
 	}
 
-	printParents(gridCells, sideIndex);
+	//printParents(gridCells, sideIndex);
 }
 
 void clearMeshBoxChanges(MeshBox& meshbox)

@@ -44,7 +44,7 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 	Grid grid(size.x(), size.y(), size.z(), 2, 3, 2);
 
 	mv::vector3<GridCell> gridCells;
-	std::list<MeshBox> meshBoxes;
+	std::list<std::unique_ptr<MeshBox>> meshBoxes;
     getSurfaceBoxes(mesh, grid, gridCells, meshBoxes);
 
 	/*mv::forEach<MeshBox>([](MeshBox& box) {
@@ -82,7 +82,7 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 	
 	for(auto item = meshBoxes.begin(); item != meshBoxes.end(); ++item)
 	{
-		MeshBox& meshBox = *item;
+		MeshBox& meshBox = **item;
 		Mesh& mesh = meshBox.mesh;
 
 		auto fnormals2 = mesh.add_property_map<face_descriptor, K::Vector_3>(
@@ -113,6 +113,9 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 	}, meshBoxes);*/
 
 	mergeIterate(config, mesh, grid, gridCells, meshBoxes);
+
+	for(auto& meshBox: meshBoxes)
+		out.push_back(meshBox->mesh);
 }
 
 int run(int argc, const char* argv[])

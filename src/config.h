@@ -24,6 +24,8 @@ struct Config
 
 	int numPrinters;
 
+	int numBoxes;
+
 	double infillRate;
 };
 

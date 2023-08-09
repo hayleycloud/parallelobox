@@ -9,4 +9,4 @@ void mergeIterate(
 	const Mesh& parent,
 	const Grid& grid,
 	mv::vector3<GridCell>& gridCells, 
-	std::list<MeshBox>& meshBoxes);
+	std::list<std::unique_ptr<MeshBox>>& meshBoxes);

@@ -38,7 +38,7 @@ void getSurfaceBoxes(
 	const Mesh& mesh, 
 	const Grid& grid,
 	mv::vector3<GridCell>& gridCells, 
-	std::list<MeshBox>& meshBoxes);
+	std::list<std::unique_ptr<MeshBox>>& meshBoxes);
 
 void getChildrenFromSide(
 	mv::vector3<GridCell>& gridCells, 
@@ -57,7 +57,7 @@ void extractUniqueMeshBoxes(
 	const Grid& grid,
 	mv::vector3<GridCell>& gridCells,
 	const Mesh& parentMesh,
-	std::vector<MeshBox>& meshBoxes,
+	std::vector<std::unique_ptr<MeshBox>>& meshBoxes,
 	int sideIndex);
 
 void clearMeshBoxChanges(MeshBox& meshbox);

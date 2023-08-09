@@ -470,12 +470,18 @@ void feed(
 	applyBranchShrinks(gridCells, adjacencyBranches);
 	applyBranchGrows(gridCells, adjacencyBranches);
 
-	printParents(gridCells.cells, gridCells.sideIndex);
+	//printParents(gridCells.cells, gridCells.sideIndex);
 }
 
 bool shouldIterateAgain(
-	const Config& config, const std::list<MeshBox>& meshBoxes)
+	int iteration,
+	const Config& config, 
+	const std::list<std::unique_ptr<MeshBox>>& meshBoxes)
 {
+	const int iterMax = 50;
+	if(iteration >= iterMax)
+		return false;
+
 	// Hard require that the models can be printed in the available printers
 	if(meshBoxes.size() > config.numPrinters)
 		return true;
@@ -540,28 +546,29 @@ void mergeIterate(
 	const Mesh& parent,
 	const Grid& grid,
 	mv::vector3<GridCell>& gridCells, 
-	std::list<MeshBox>& meshBoxes)
+	std::list<std::unique_ptr<MeshBox>>& meshBoxes)
 {
 	printParents(gridCells);
 
 	int iteration = 1;
-	while(shouldIterateAgain(config, meshBoxes))
+	while(shouldIterateAgain(iteration, config, meshBoxes))
 	{
 		std::cout << "Iteration " << iteration << std::endl;
 
 		MeshBoxPtrCostList meshboxCosts; 
 		for(auto itr = meshBoxes.begin(); itr != meshBoxes.end(); ++itr)
 		{
-			auto& meshBox = *itr;
+			auto& meshBoxPtr = *itr;
+			auto& meshBox = *meshBoxPtr;
+
 			if(!meshBox.mesh.is_valid())
 				std::cerr << "Mesh is not valid!" << std::endl;
 
 			meshboxCosts.push_back(std::make_pair(
-				std::addressof(meshBox), fitness(config, meshBox.mesh)));
+				meshBoxPtr.get(), fitness(config, meshBox.mesh)));
 		}
 
 		// Sort the meshboxes such that highest cost is first
-		// TODO: Lowest cost ya dummy
 		std::sort(meshboxCosts.begin(), meshboxCosts.end(), [](auto& a, auto& b) {
 			return a.second < b.second;
 		});
@@ -573,7 +580,7 @@ void mergeIterate(
 		std::cout << "Target: " << prey << std::endl;
 
 		// TODO: Recalculate only altered mesh boxes?
-		std::array<std::vector<MeshBox>,NUM_SIDES> sideInstances;
+		std::array<std::vector<std::unique_ptr<MeshBox>>,NUM_SIDES> sideInstances;
 		std::array<Direction,NUM_SIDES> sideDirections = {
 			Direction::Left, Direction::Right,
 			Direction::Up, Direction::Down,
@@ -597,8 +604,9 @@ void mergeIterate(
 			// of the best cost path available!
 
 			MeshBoxPtrCostList mbSideCosts; 
-			for(MeshBox& meshBox: sideInstances[sideIndex])
+			for(auto& meshBoxPtr: sideInstances[sideIndex])
 			{
+				MeshBox& meshBox = *meshBoxPtr;
 				//std::cout << "side instance" << std::endl;
 
 				if(meshBox.mesh.is_empty())
@@ -606,7 +614,7 @@ void mergeIterate(
 
 				//std::cout << "meshBox: " << meshBox << std::endl;
 				auto meshBoxCost = std::make_pair(
-					std::addressof(meshBox), fitness(config, meshBox.mesh));
+					meshBoxPtr.get(), fitness(config, meshBox.mesh));
 				if(meshBoxCost.second > 0.0)
 					mbSideCosts.push_back(meshBoxCost);
 				//std::cout << "fitness" << std::endl;
@@ -630,8 +638,12 @@ void mergeIterate(
 		printParents(gridCells);
 
 		meshBoxes.clear();
-		std::vector<MeshBox>& bestInst = sideInstances[best.index];
-		std::copy(bestInst.begin(), bestInst.end(), std::back_inserter(meshBoxes));
+		std::vector<std::unique_ptr<MeshBox>>& bestInst = sideInstances[best.index];
+		for(auto& meshBox: bestInst)
+		{
+			meshBoxes.push_back(std::move(meshBox));
+		}
+		//std::copy(bestInst.begin(), bestInst.end(), std::back_inserter(meshBoxes));
 
 		//for(MeshBox& box: meshBoxes) 
 		//{
