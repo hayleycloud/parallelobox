@@ -145,6 +145,8 @@ void printUsage() {
 	std::cout << "  --in <file>          Path to an input model to process." << std::endl;
 	std::cout << "  --out <directory>    The directory to store the partitioned models." << std::endl;
 	std::cout << "  --num <printers>     Number of printers available." << std::endl;
+	std::cout << "  --voxels <number>    Number of initial boxes per dimension to use to decompose mesh." << std::endl;
+	std::cout << "                       [default: 100]." << std::endl;
 	std::cout << "  --printer <file>     Load printer settings from <file>." << std::endl;
 	std::cout << "                       [default: \"printers/default.ini\"]." << std::endl;
 	std::cout << "  --infill <rate>      Infill rate (1.0 = 100%, 0.5 = 50%)." << std::endl;
@@ -179,6 +181,12 @@ Config handleArguments(const Arguments& args)
 	if(numPrintersArg)
 		numPrinters = *numPrintersArg;
 	config.numPrinters = numPrinters;
+
+	int numBoxes = 5;
+	auto numBoxesArg = args.getInt("--segs");
+	if(numBoxesArg)
+		numBoxes = *numBoxesArg;
+	config.numBoxes = numBoxes;
 
 	std::string printerConfigFile("printers/default.ini");
 	auto printerConfigPath = args.get("--printer");
@@ -223,6 +231,8 @@ void printConfig(const Config& config)
 		      << printer.overhangTolerance << "°" << std::endl;
 
 	std::cout << "Infill rate: " << config.infillRate * 100 << "\%" << std::endl;
+
+	std::cout << "Number of initial boxes per dimension: " << config.numBoxes << std::endl;
 
 	std::cout << "Number of printers: " << config.numPrinters << std::endl;
 }

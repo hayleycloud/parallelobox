@@ -41,7 +41,8 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 
 	std::cout << "Computed normals." << std::endl;
 
-	Grid grid(size.x(), size.y(), size.z(), 2, 3, 2);
+	int segs = config.numBoxes;
+	Grid grid(size.x(), size.y(), size.z(), segs, segs, segs);
 
 	mv::vector3<GridCell> gridCells;
 	std::list<std::unique_ptr<MeshBox>> meshBoxes;

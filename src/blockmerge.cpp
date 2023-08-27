@@ -476,20 +476,49 @@ void feed(
 bool shouldIterateAgain(
 	int iteration,
 	const Config& config, 
-	const std::list<std::unique_ptr<MeshBox>>& meshBoxes)
+	const std::list<std::unique_ptr<MeshBox>>& meshBoxes,
+	double bestFitness)
 {
 	const int iterMax = 50;
 	if(iteration >= iterMax)
 		return false;
 
 	// Hard require that the models can be printed in the available printers
-	if(meshBoxes.size() > config.numPrinters)
-		return true;
+	if(meshBoxes.size() <= config.numPrinters)
+		return false;
 
-	// We can iterate to combine models further if the cost disparity is high
-	// We should stop if it becomes evident that the algorithm has stagnated
-	
-	return false;
+	// Determine if fitnesses are homogenous and find the best while we're here
+	bool fitnessIsFlat = true;
+	double _bestFitness = -1.0;
+	for(auto itr = meshBoxes.begin(); itr != meshBoxes.end(); ++itr)
+	{
+		auto& meshBoxPtr = *itr;
+		auto& meshBox = *meshBoxPtr;
+
+		double f = fitness(config, meshBox.mesh);
+		if(_bestFitness < 0.0)
+			_bestFitness = f;
+		else
+		{
+			if(f != bestFitness)
+				fitnessIsFlat = false;
+
+			if(f < _bestFitness)
+				_bestFitness = f;
+		}
+	}
+
+	// If all fitnesses are the same ("flat"), oops
+	if(fitnessIsFlat)
+		return false;
+
+	// Use epsilon testing to determine if fitnesses have stagnated
+	constexpr double eps = 0.0001;
+	if(std::abs(bestFitness - _bestFitness) < eps)
+		return false;
+
+	// Continue
+	return true;
 }
 
 // The Dialogue
@@ -550,8 +579,9 @@ void mergeIterate(
 {
 	printParents(gridCells);
 
+	double bestFitness = -1.0;
 	int iteration = 1;
-	while(shouldIterateAgain(iteration, config, meshBoxes))
+	while(shouldIterateAgain(iteration, config, meshBoxes, bestFitness))
 	{
 		std::cout << "Iteration " << iteration << std::endl;
 
@@ -635,7 +665,8 @@ void mergeIterate(
 
 		std::cout << "Best path: " << best.index << " (" << best.score << ")" << std::endl;
 
-		printParents(gridCells);
+		//printParents(gridCells);
+		std::cout << "Number of boxes: " << numParents(gridCells, best.index) << std::endl;
 
 		meshBoxes.clear();
 		std::vector<std::unique_ptr<MeshBox>>& bestInst = sideInstances[best.index];
@@ -643,6 +674,8 @@ void mergeIterate(
 		{
 			meshBoxes.push_back(std::move(meshBox));
 		}
+
+		bestFitness = best.score;
 		//std::copy(bestInst.begin(), bestInst.end(), std::back_inserter(meshBoxes));
 
 		//for(MeshBox& box: meshBoxes) 

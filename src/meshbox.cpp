@@ -223,6 +223,18 @@ void assignParents(mv::vector3<GridCell>& gridCells, int sideIndex)
 	}, gridCells);
 }
 
+size_t numParents(mv::vector3<GridCell>& gridCells, int sideIndex)
+{
+	size_t num = 0;
+	mv::forEach<GridCell>([&](const GridCell& cell) {
+		if(cell.type != GridCell::ContentType::Boundary)
+			return;
+		++num;
+	}, gridCells);
+
+	return num;
+}
+
 void printParents(mv::vector3<GridCell>& gridCells)
 {
 	mv::forEach<GridCell>([&](GridCell& cell) {
