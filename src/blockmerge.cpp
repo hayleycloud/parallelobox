@@ -473,12 +473,21 @@ void feed(
 	//printParents(gridCells.cells, gridCells.sideIndex);
 }
 
+struct Rechallenge
+{
+	int rechallengeCount;
+	int index;
+};
+
 bool shouldIterateAgain(
 	int iteration,
 	const Config& config, 
 	const std::list<std::unique_ptr<MeshBox>>& meshBoxes,
-	double bestFitness)
+	double bestFitness,
+	std::optional<Rechallenge>& rechallenge)
 {
+	constexpr double eps = 0.0001;	// For epsilon testing
+
 	const int iterMax = 50;
 	if(iteration >= iterMax)
 		return false;
@@ -490,6 +499,8 @@ bool shouldIterateAgain(
 	// Determine if fitnesses are homogenous and find the best while we're here
 	bool fitnessIsFlat = true;
 	double _bestFitness = -1.0;
+	std::vector<int> bestIndices;
+	int index = 0;
 	for(auto itr = meshBoxes.begin(); itr != meshBoxes.end(); ++itr)
 	{
 		auto& meshBoxPtr = *itr;
@@ -497,25 +508,59 @@ bool shouldIterateAgain(
 
 		double f = fitness(config, meshBox.mesh);
 		if(_bestFitness < 0.0)
+		{
 			_bestFitness = f;
+			bestIndices.push_back(index);
+		}
 		else
 		{
-			if(f != bestFitness)
+			if(f != _bestFitness)
 				fitnessIsFlat = false;
 
+			if(std::abs(f - _bestFitness) < eps)
+				bestIndices.push_back(index);
+
 			if(f < _bestFitness)
+			{
 				_bestFitness = f;
+
+				bestIndices.clear();
+				bestIndices.push_back(index);
+			}
 		}
+
+		++index;
 	}
+
+	std::cout << "Best Fitness: " << bestFitness << " " << _bestFitness << std::endl;
+
+	rechallenge = std::optional<Rechallenge>();
 
 	// If all fitnesses are the same ("flat"), oops
 	if(fitnessIsFlat)
-		return false;
+	{
+		rechallenge->index = bestIndices[rechallenge->rechallengeCount];
+
+		++rechallenge->rechallengeCount;
+		if(rechallenge->rechallengeCount > 3)
+			return false;
+		else
+			return true;
+	}
 
 	// Use epsilon testing to determine if fitnesses have stagnated
-	constexpr double eps = 0.0001;
 	if(std::abs(bestFitness - _bestFitness) < eps)
-		return false;
+	{
+		rechallenge->index = bestIndices[rechallenge->rechallengeCount];
+
+		++rechallenge->rechallengeCount;
+		if(rechallenge->rechallengeCount > 3)
+			return false;
+		else
+			return true;
+	}
+
+	rechallenge = std::nullopt;
 
 	// Continue
 	return true;
@@ -553,7 +598,7 @@ SideScore bestSideScore(
 
 	for(unsigned int sideIndex = 0; sideIndex < NUM_SIDES; ++sideIndex)
 	{
-		int score = sideIndexScores.at(sideIndex);
+		double score = sideIndexScores.at(sideIndex);
 		std::cout << "Index " << sideIndex << ": " << score << std::endl;
 		if(score < bestScore)
 		{
@@ -579,9 +624,11 @@ void mergeIterate(
 {
 	printParents(gridCells);
 
+	std::optional<Rechallenge> rechallenge;
+
 	double bestFitness = -1.0;
 	int iteration = 1;
-	while(shouldIterateAgain(iteration, config, meshBoxes, bestFitness))
+	while(shouldIterateAgain(iteration, config, meshBoxes, bestFitness, rechallenge))
 	{
 		std::cout << "Iteration " << iteration << std::endl;
 
@@ -606,7 +653,9 @@ void mergeIterate(
 		//for(const auto& box: meshboxCosts)
 		//	std::cout << box.second << std::endl;
 
-		MeshBox* prey = meshboxCosts.front().first;
+		MeshBox* prey = rechallenge ? 
+			meshboxCosts[rechallenge->index].first : 
+			meshboxCosts.front().first;
 		std::cout << "Target: " << prey << std::endl;
 
 		// TODO: Recalculate only altered mesh boxes?
