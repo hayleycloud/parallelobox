@@ -5,6 +5,7 @@
 #include "symmetry.h"
 #include "align.h"
 #include "blockmerge.h"
+#include "clustering.h"
 #include "multivec.h"
 
 #include <sstream>
@@ -13,6 +14,27 @@
 
 namespace fs = std::filesystem;
 
+std::vector<MeshBox*> getSourceMeshBoxesFrom(
+	const std::vector<Cluster>& clusters, 
+	const Grid& grid,
+	mv::vector3<GridCell>& gridCells)
+{
+	std::vector<MeshBox*> sourceMeshBoxes;
+
+	for(const Cluster& cluster: clusters)
+	{
+		K::Vector_3 d = cluster.centroid - grid.getOrigin();
+
+		int offsetX = std::floor(d.x() / grid.getElementSize());
+		int offsetY = std::floor(d.y() / grid.getElementSize());
+		int offsetZ = std::floor(d.z() / grid.getElementSize());
+
+		GridCell& targetCell = mv::get(gridCells, offsetX, offsetY, offsetZ);
+		sourceMeshBoxes.push_back(targetCell.parent);
+	}
+
+	return sourceMeshBoxes;
+}
 
 void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 {
@@ -99,8 +121,12 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 			}
 		}
 
-		std::cout << bestOverhangArea << " of overhang." << std::endl;
+		//std::cout << bestOverhangArea << " of overhang." << std::endl;
 	}
+
+	std::vector<Cluster> clusters = getClusters(numPrinters, mesh);
+	std::vector<MeshBox*> srcMeshBoxes 
+		= getSourceMeshBoxesFrom(clusters, grid, gridCells);
 
 	/*mv::vector3<MeshBox*> meshBoxRefs = mv::map<MeshBox,MeshBox*>(
 		[](MeshBox& meshBox) -> MeshBox* {
