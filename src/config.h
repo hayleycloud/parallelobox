@@ -24,7 +24,7 @@ struct Config
 
 	int numPrinters;
 
-	int numBoxes;
+	double granularityScale;
 
 	double infillRate;
 };

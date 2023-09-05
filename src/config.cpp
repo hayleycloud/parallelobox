@@ -142,15 +142,15 @@ void printUsage() {
 	std::cout << "Usage: parallelobox [OPTIONS]" << std::endl;
 	std::cout << std::endl;
 	std::cout << "Options:" << std::endl;
-	std::cout << "  --in <file>          Path to an input model to process." << std::endl;
-	std::cout << "  --out <directory>    The directory to store the partitioned models." << std::endl;
-	std::cout << "  --num <printers>     Number of printers available." << std::endl;
-	std::cout << "  --voxels <number>    Number of initial boxes per dimension to use to decompose mesh." << std::endl;
-	std::cout << "                       [default: 100]." << std::endl;
-	std::cout << "  --printer <file>     Load printer settings from <file>." << std::endl;
-	std::cout << "                       [default: \"printers/default.ini\"]." << std::endl;
-	std::cout << "  --infill <rate>      Infill rate (1.0 = 100%, 0.5 = 50%)." << std::endl;
-	std::cout << "  --help               Print this usage documentation." << std::endl;
+	std::cout << "  --in <file>             Path to an input model to process." << std::endl;
+	std::cout << "  --out <directory>       The directory to store the partitioned models." << std::endl;
+	std::cout << "  --num <printers>        Number of printers available." << std::endl;
+	std::cout << "  --granularity <mode>    Degree of initial voxelisation." << std::endl;
+	std::cout << "                          [coarse, regular (default), fine, vfine]." << std::endl;
+	std::cout << "  --printer <file>        Load printer settings from <file>." << std::endl;
+	std::cout << "                          [default: \"printers/default.ini\"]." << std::endl;
+	std::cout << "  --infill <rate>         Infill rate (1.0 = 100%, 0.5 = 50%)." << std::endl;
+	std::cout << "  --help                  Print this usage documentation." << std::endl;
 	std::cout << std::endl;
 	std::cout << "Options --in, --num, and --out are mandatory." << std::endl;
 	std::cout << std::endl;
@@ -158,7 +158,29 @@ void printUsage() {
 	std::cout << "<http://www.hayleyhatton.co.uk/contact.htm>." << std::endl;
 }
 
-Config handleArguments(const Arguments& args) 
+[[nodiscard]] double scaleFromCubeRoot(double root)
+{
+	return 1.0 / (root * root * root);
+}
+
+[[nodiscard]] double granularityScaleFrom(const std::string& granularityStr)
+{
+	const std::unordered_map<std::string,double> types{
+		{ "xcoarse", scaleFromCubeRoot(2.0) },
+		{ "vcoarse", scaleFromCubeRoot(3.0) },
+		{ "coarse",  scaleFromCubeRoot(4.0) },
+		{ "regular", scaleFromCubeRoot(5.0) },
+		{ "fine",    scaleFromCubeRoot(6.0) },
+		{ "vfine",   scaleFromCubeRoot(7.0) }
+	};
+
+	if(types.count(granularityStr) == 0)
+		return types.at("regular");
+
+	return types.at(granularityStr);
+}
+
+[[nodiscard]] Config handleArguments(const Arguments& args) 
 {
 	Config config;
 
@@ -182,11 +204,11 @@ Config handleArguments(const Arguments& args)
 		numPrinters = *numPrintersArg;
 	config.numPrinters = numPrinters;
 
-	int numBoxes = 5;
-	auto numBoxesArg = args.getInt("--segs");
-	if(numBoxesArg)
-		numBoxes = *numBoxesArg;
-	config.numBoxes = numBoxes;
+	double granularity = granularityScaleFrom("regular");
+	const auto granularityArg = args.get("--granularity");
+	if(granularityArg)
+		granularity = granularityScaleFrom(*granularityArg);
+	config.granularityScale = granularity;
 
 	std::string printerConfigFile("printers/default.ini");
 	auto printerConfigPath = args.get("--printer");
@@ -232,7 +254,8 @@ void printConfig(const Config& config)
 
 	std::cout << "Infill rate: " << config.infillRate * 100 << "\%" << std::endl;
 
-	std::cout << "Number of initial boxes per dimension: " << config.numBoxes << std::endl;
+	int numBoxes = static_cast<int>(1.0 / config.granularityScale);
+	std::cout << "Number of initial boxes: ~" << numBoxes << std::endl;
 
 	std::cout << "Number of printers: " << config.numPrinters << std::endl;
 }

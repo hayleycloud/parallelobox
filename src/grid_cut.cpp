@@ -2,44 +2,51 @@
 
 #include <omp.h>
 
-Grid::Grid(
-	double width, double height, double thickness,
-	size_t xElements, size_t yElements, size_t zElements)
-: m_Width(xElements), m_Height(yElements), m_Thickness(zElements),
-  m_ZStride(xElements * yElements), m_YStride(xElements),
-  m_XStep(width / static_cast<double>(xElements)),
-  m_YStep(height / static_cast<double>(yElements)),
-  m_ZStep(thickness / static_cast<double>(zElements)),
+Grid::Grid(double width, double height, double thickness, double granularity)
+: m_ElementSize(std::cbrt((width * height * thickness) * granularity)),
+  m_NumBoxesX(std::ceil(width / m_ElementSize)),
+  m_NumBoxesY(std::ceil(height / m_ElementSize)),
+  m_NumBoxesZ(std::ceil(thickness / m_ElementSize)),
+  m_ZStride(m_NumBoxesX * m_NumBoxesY),
+  m_YStride(m_NumBoxesX),
   m_Origin(width * -0.5, height * -0.5, thickness * -0.5)
 {
-	m_Grid.reserve(xElements * yElements * zElements);
+	const size_t numBoxes = m_NumBoxesX * m_NumBoxesY * m_NumBoxesZ;
 
-	for(size_t z = 0; z < zElements; ++z)
+	std::cout << "Creating grid of block size " << m_ElementSize << " ";
+	std::cout << "(" << m_NumBoxesX << ", " << m_NumBoxesY << ", " << m_NumBoxesZ << ")";
+	std::cout << " [" << numBoxes << " boxes]... ";
+
+	m_Grid.reserve(numBoxes);
+
+	for(size_t z = 0; z < m_NumBoxesZ; ++z)
 	{
-		for(size_t y = 0; y < yElements; ++y)
+		for(size_t y = 0; y < m_NumBoxesY; ++y)
 		{
-			for(size_t x = 0; x < xElements; ++x)
+			for(size_t x = 0; x < m_NumBoxesX; ++x)
 			{
-				K::Vector_3 currOffset = 
-					K::Vector_3(x * m_XStep, y * m_YStep, z * m_ZStep);
-				K::Vector_3 nextOffset = 
-					K::Vector_3((x+1) * m_XStep, (y+1) * m_YStep, (z+1) * m_ZStep);
+				K::Vector_3 currOffset = K::Vector_3(
+					x * m_ElementSize, y * m_ElementSize, z * m_ElementSize);
+				K::Vector_3 nextOffset = K::Vector_3(
+					(x+1) * m_ElementSize, (y+1) * m_ElementSize, (z+1) * m_ElementSize);
 
 				m_Grid.push_back(CGAL::Iso_cuboid_3<K>(
 					m_Origin + currOffset, 
 					m_Origin + nextOffset));
 
-				std::cout << "min: " << m_Grid.back().min() 
-					      << ", max: " << m_Grid.back().max()
-						  << std::endl;;
+				//std::cout << "min: " << m_Grid.back().min() 
+				//	      << ", max: " << m_Grid.back().max()
+				//		  << std::endl;;
 			}
 		}
 	}
+
+	std::cout << "done." << std::endl;
 }
 
 size_t Grid::getOffset(size_t x, size_t y, size_t z) const
 {
-	return (m_ZStride * z) + (m_YStride * y) + x;
+	return (m_ElementSize * z) + (m_ElementSize * y) + x;
 }
 
 const K::Iso_cuboid_3& Grid::get(size_t x, size_t y, size_t z) const
@@ -84,14 +91,14 @@ void Grid::clipSurface(Mesh& mesh, const Coord& coord) const
 
 void Grid::clip(Mesh& mesh, std::vector<Mesh>& outMeshes, bool fill) const
 {
-	outMeshes.resize(m_Width * m_Height * m_Thickness);
+	outMeshes.resize(m_NumBoxesX * m_NumBoxesY * m_NumBoxesZ);
 
 	//#pragma omp parallel for
-	for(size_t z = 0; z < m_Thickness; ++z)
+	for(size_t z = 0; z < m_NumBoxesZ; ++z)
 	{
-		for(size_t y = 0; y < m_Height; ++y)
+		for(size_t y = 0; y < m_NumBoxesY; ++y)
 		{
-			for(size_t x = 0; x < m_Width; ++x)
+			for(size_t x = 0; x < m_NumBoxesX; ++x)
 			{
 				Mesh out(mesh);
 				clip(out, x, y, z, fill);

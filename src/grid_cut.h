@@ -10,29 +10,23 @@ public:
 		size_t x, y, z;
 	};
 
-	Grid(
-		double width, double height, double thickness,
-		size_t xElements, size_t yElements, size_t zElements);
+	Grid(double width, double height, double thickness, double granularity);
 
-	size_t getWidth() const { return m_Width; }
+	[[nodiscard]] size_t getNumBoxesX() const { return m_NumBoxesX; }
 
-	size_t getHeight() const { return m_Height; }
+	[[nodiscard]] size_t getNumBoxesY() const { return m_NumBoxesY; }
 
-	size_t getThickness() const { return m_Thickness; }
+	[[nodiscard]] size_t getNumBoxesZ() const { return m_NumBoxesZ; }
 
-	double getXStepSize() const { return m_XStep; }
+	[[nodiscard]] double getElementSize() const { return m_ElementSize; }
 
-	double getYStepSize() const { return m_YStep; }
+	[[nodiscard]] const K::Point_3& getOrigin() const { return m_Origin; }
 
-	double getZStepSize() const { return m_ZStep; }
+	[[nodiscard]] const auto& get() const { return m_Grid; }
 
-	const K::Point_3& getOrigin() const { return m_Origin; }
+	[[nodiscard]] const K::Iso_cuboid_3& get(size_t x, size_t y, size_t z) const;
 
-	const auto& get() const { return m_Grid; }
-
-	const K::Iso_cuboid_3& get(size_t x, size_t y, size_t z) const;
-
-	const K::Iso_cuboid_3& get(const Coord& coord) const;
+	[[nodiscard]] const K::Iso_cuboid_3& get(const Coord& coord) const;
 
 	void clipVolume(Mesh& mesh, std::vector<Mesh>& outMeshes) const;
 
@@ -47,9 +41,9 @@ public:
 	void clipSurface(Mesh& mesh, const Coord& coord) const;
 
 private:
-	const size_t m_Width, m_Height, m_Thickness;
+	const double m_ElementSize;
+	const size_t m_NumBoxesX, m_NumBoxesY, m_NumBoxesZ;
 	const size_t m_ZStride, m_YStride;
-	const double m_XStep, m_YStep, m_ZStep;
 	const K::Point_3 m_Origin;
 	std::vector<K::Iso_cuboid_3> m_Grid;
 

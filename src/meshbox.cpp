@@ -27,16 +27,16 @@ void getSurfaceBoxes(
 	mv::vector3<GridCell>& gridCells, 
 	std::list<std::unique_ptr<MeshBox>>& meshBoxes)
 {
-	gridCells.resize(grid.getThickness());
+	gridCells.resize(grid.getNumBoxesZ());
 	
 	#pragma omp parallel for
-	for(int z = 0; z < grid.getThickness(); ++z)
+	for(int z = 0; z < grid.getNumBoxesZ(); ++z)
 	{
-		gridCells[z].resize(grid.getHeight());
-		for(int y = 0; y < grid.getHeight(); ++y)
+		gridCells[z].resize(grid.getNumBoxesY());
+		for(int y = 0; y < grid.getNumBoxesY(); ++y)
 		{
-			gridCells[z][y].resize(grid.getWidth());
-			for(int x = 0; x < grid.getWidth(); ++x)
+			gridCells[z][y].resize(grid.getNumBoxesX());
+			for(int x = 0; x < grid.getNumBoxesX(); ++x)
 			{
 				const auto& dims = grid.get(x, y, z);
 
@@ -129,13 +129,13 @@ void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child)
 	const Cuboid& mbDims = child.dims;
 	const K::Point_3& origin = grid.getOrigin();
 	const K::Point_3 meshOrigin(
-		origin.x() + (mbDims.origin.x * grid.getXStepSize()),
-		origin.y() + (mbDims.origin.y * grid.getYStepSize()),
-		origin.z() + (mbDims.origin.z * grid.getZStepSize()));
+		origin.x() + (mbDims.origin.x * grid.getElementSize()),
+		origin.y() + (mbDims.origin.y * grid.getElementSize()),
+		origin.z() + (mbDims.origin.z * grid.getElementSize()));
 	const K::Vector_3 meshSize(
-		(mbDims.size.x + 1) * grid.getXStepSize(),
-		(mbDims.size.y + 1) * grid.getYStepSize(),
-		(mbDims.size.z + 1) * grid.getZStepSize());
+		(mbDims.size.x + 1) * grid.getElementSize(),
+		(mbDims.size.y + 1) * grid.getElementSize(),
+		(mbDims.size.z + 1) * grid.getElementSize());
 	const K::Point_3 meshEnd = meshOrigin + meshSize;
 
 	const CGAL::Iso_cuboid_3<K> bbox(meshOrigin, meshEnd);

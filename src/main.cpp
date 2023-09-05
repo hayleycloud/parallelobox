@@ -37,12 +37,9 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 		"f:normals", CGAL::NULL_VECTOR).first;
 	PMP::compute_face_normals(mesh, fnormals);
 
-	
-
 	std::cout << "Computed normals." << std::endl;
 
-	int segs = config.numBoxes;
-	Grid grid(size.x(), size.y(), size.z(), segs, segs, segs);
+	Grid grid(size.x(), size.y(), size.z(), config.granularityScale);
 
 	mv::vector3<GridCell> gridCells;
 	std::list<std::unique_ptr<MeshBox>> meshBoxes;
