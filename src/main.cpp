@@ -124,7 +124,7 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 		//std::cout << bestOverhangArea << " of overhang." << std::endl;
 	}
 
-	std::vector<Cluster> clusters = getClusters(numPrinters, mesh);
+	std::vector<Cluster> clusters = getClusters(config.numPrinters, mesh);
 	std::vector<MeshBox*> srcMeshBoxes 
 		= getSourceMeshBoxesFrom(clusters, grid, gridCells);
 

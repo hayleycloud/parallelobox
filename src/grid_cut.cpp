@@ -46,7 +46,7 @@ Grid::Grid(double width, double height, double thickness, double granularity)
 
 size_t Grid::getOffset(size_t x, size_t y, size_t z) const
 {
-	return (m_ElementSize * z) + (m_ElementSize * y) + x;
+	return (m_ZStride * z) + (m_YStride * y) + x;
 }
 
 const K::Iso_cuboid_3& Grid::get(size_t x, size_t y, size_t z) const

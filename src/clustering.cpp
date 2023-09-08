@@ -1,7 +1,13 @@
 #include "clustering.h"
 #include "random.h"
 
-bool indexAlreadyExists(int index, const std::vector<int>& indices)
+void printClusters(const std::vector<Cluster>& clusters)
+{
+	for(const Cluster& cluster: clusters)
+		std::cout << '\t' << cluster.centroid << std::endl;
+}
+
+bool indexAlreadyExists(int index, const std::vector<unsigned int>& indices)
 {
 	return std::find(indices.begin(), indices.end(), index) != indices.end();
 }
@@ -11,8 +17,8 @@ bool indexAlreadyExists(int index, const std::vector<int>& indices)
 	std::vector<Cluster> clusters;
 	clusters.reserve(k);
 
-	std::vector<int> chosenIndices;
-	RNG<int> rng = makeRNG<int>(0, mesh.number_of_vertices());
+	std::vector<unsigned int> chosenIndices;
+	RNGInt<unsigned int> rng = makeRNGInt<unsigned int>(0, mesh.number_of_vertices());
 
 	for(int i = 0; i < k; )
 	{
@@ -22,7 +28,8 @@ bool indexAlreadyExists(int index, const std::vector<int>& indices)
 			continue;
 		chosenIndices.push_back(randomIndex);
 
-		clusters.push_back((Cluster) { mesh.point(randomIndex), {} });
+		clusters.push_back((Cluster) { 
+			mesh.point(Mesh::Vertex_index(randomIndex)), {} });
 
 		++i;
 	}
@@ -38,6 +45,7 @@ bool indexAlreadyExists(int index, const std::vector<int>& indices)
 
 void assignVerticesToClusters(const Mesh& mesh, std::vector<Cluster>& clusters)
 {
+	int index = 0;
 	for(const K::Point_3& p: mesh.points())
 	{
 		double bestL2Norm = std::numeric_limits<double>::max();
@@ -52,18 +60,23 @@ void assignVerticesToClusters(const Mesh& mesh, std::vector<Cluster>& clusters)
 				bestCluster = std::addressof(cluster);
 			}
 		}
+
+		assert(bestCluster);
+		bestCluster->vertices.push_back(index);
+
+		++index;
 	}
 }
 
 [[nodiscard]] 
 K::Point_3 getClusterMeanPos(const Mesh& mesh, const Cluster& cluster)
 {
-	const double numIndices = static_cast<double>(cluster.indices.size());
+	const double numIndices = static_cast<double>(cluster.vertices.size());
 
 	double xSum, ySum, zSum;
-	for(int index: cluster.indices)
+	for(int index: cluster.vertices)
 	{
-		const K::Point_3& p = mesh.point(index);
+		const K::Point_3& p = mesh.point(Mesh::Vertex_index(index));
 		xSum += p.x();
 		ySum += p.y();
 		zSum += p.z();
@@ -94,9 +107,9 @@ bool compareClusterSets(
 	{
 		const Cluster& cluster1 = clusters1.at(i);
 		const Cluster& cluster2 = clusters2.at(i);
-		for(int j = 0; j < cluster1.indices.size(); ++j)
+		for(int j = 0; j < cluster1.vertices.size(); ++j)
 		{
-			if(cluster1.indices.at(j) != cluster2.indices.at(j))
+			if(cluster1.vertices.at(j) != cluster2.vertices.at(j))
 				return false;
 		}
 	}
@@ -108,10 +121,14 @@ std::vector<Cluster> getClusters(int k, const Mesh& mesh)
 {
 	std::vector<Cluster> clusters = getInitialCentroids(k, mesh);
 	assignVerticesToClusters(mesh, clusters);
-	
+
+	int itrNum = 1;
 	bool converged = false;
 	while(!converged)
 	{
+		std::cout << "k-Means Iteration " << itrNum << std::endl;
+		printClusters(clusters);
+
 		std::vector<K::Point_3> meanPositions = 
 			getClusterMeanPositions(mesh, clusters);
 
@@ -123,7 +140,12 @@ std::vector<Cluster> getClusters(int k, const Mesh& mesh)
 
 		converged = compareClusterSets(clusters, newClusters);
 		clusters = newClusters;
+
+		++itrNum;
 	}
+
+	std::cout << "k-Means Iteration " << itrNum+1 << std::endl;
+	printClusters(clusters);
 
 	return clusters;
 }

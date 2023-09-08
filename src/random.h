@@ -2,8 +2,31 @@
 
 #include <random>
 
-typedef std::uniform_real_distribution RNG;
+extern std::random_device randDev;
+extern std::mt19937 randEng;
 
-[[nodiscard]] template<class T> RNG<T> makeRNG(T min, T max);
+template<class T>
+using RNGReal = std::uniform_real_distribution<T>;
 
-[[nodiscard]] T fetchRandom(RNG<T> rng);
+template<class T> RNGReal<T> makeRNGReal(T min, T max)
+{
+	return std::uniform_real_distribution<T>(min, max);
+}
+
+template<class T> T fetchRandom(RNGReal<T> rng)
+{
+	return rng(randEng);
+}
+
+template<class T>
+using RNGInt = std::uniform_int_distribution<T>;
+
+template<class T> RNGInt<T> makeRNGInt(T min, T max)
+{
+	return std::uniform_int_distribution<T>(min, max);
+}
+
+template<class T> T fetchRandom(RNGInt<T> rng)
+{
+	return rng(randEng);
+}

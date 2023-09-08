@@ -1,6 +1,6 @@
 #include "symmetry.h"
+#include "random.h"
 #include <algorithm>
-#include <random>
 #include <numbers>
 
 constexpr unsigned int ITERATIONS = 3;
@@ -9,8 +9,6 @@ constexpr unsigned int FILTER_SIZE = 5;
 constexpr double HARD_ERROR_TOLERANCE = 1.0;
 constexpr double INITIAL_SEARCH_RADIUS = 0.1;
 
-std::random_device randDev;
-std::mt19937 randEng(randDev());
 
 ///////////////////////////////////////////////////////////////////////////////
 // Utility Functions
@@ -165,13 +163,13 @@ double symmetryFitness(
 void stochasticNormalSample(
 	std::vector<LLNormal>* normals, 
 	unsigned int sampleSize,
-	std::uniform_real_distribution<double>& uRange,
-	std::uniform_real_distribution<double>& vRange)
+	RNGReal<double>& uRange,
+	RNGReal<double>& vRange)
 {
 	for(unsigned int i = 0; i < sampleSize; ++i)
 	{
-		double u = uRange(randEng);
-		double v = vRange(randEng);
+		double u = fetchRandom(uRange);
+		double v = fetchRandom(vRange);
 
 		normalizeSpherical(&u);
 		normalizeSpherical(&v);
@@ -219,8 +217,8 @@ void findSymmetries(
 
 		if(bestNormals.size() == 0)
 		{
-			std::uniform_real_distribution<double>
-				uRange(0.0, 1.0), vRange(0.0, 1.0);
+			RNGReal<double> uRange = makeRNGReal<double>(0.0, 1.0);
+			RNGReal<double> vRange = makeRNGReal<double>(0.0, 1.0);
 			stochasticNormalSample(&sampleNormals, NUM_SAMPLES, uRange, vRange);
 		}
 		else
@@ -230,9 +228,10 @@ void findSymmetries(
 			for(const LLNormal& normal: bestNormals)
 			{
 				const double u = normal.u, v = normal.v;
-				std::uniform_real_distribution<double>
-					uRange(u - halfSearchRad, u + halfSearchRad), 
-					vRange(v - halfSearchRad, v + halfSearchRad);
+				RNGReal<double> uRange = 
+					makeRNGReal<double>(u - halfSearchRad, u + halfSearchRad);
+				RNGReal<double> vRange = 
+					makeRNGReal<double>(v - halfSearchRad, v + halfSearchRad);
 				stochasticNormalSample(
 					&sampleNormals, NUM_SAMPLES / 3, uRange, vRange);
 			}
