@@ -156,4 +156,23 @@ T2 reduce(
 	return out;
 }
 
+template <class T1>
+const T1* find(
+	std::function<bool(const T1&)> callback, const vector3<T1>& data)
+{
+	for(size_t z = 0; z < data.size(); ++z)
+	{
+		for(size_t y = 0; y < data[z].size(); ++y)
+		{
+			for(size_t x = 0; x < data[z][y].size(); ++x)
+			{
+				if(callback(data[z][y][x]))
+					return std::addressof(data[z][y][x]);
+			}
+		}
+	}
+
+	return nullptr;
+}
+
 }

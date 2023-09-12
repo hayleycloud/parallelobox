@@ -7,15 +7,12 @@
 
 struct MeshBox;
 
-constexpr int NUM_SIDES = 6;
-
 struct GridCell
 {
 	Vector3D position;
 
 	Mesh mesh;
-	MeshBox* parent;
-	std::array<MeshBox*,NUM_SIDES> sideParents;
+	std::vector<MeshBox*> parents;
 
 	enum class ContentType {
 		Internal,
@@ -29,26 +26,24 @@ struct MeshBox
 	Mesh mesh;
 	Cuboid dims;
 	std::vector<GridCell*> children;
-	
-	//K::Iso_cuboid_3 dims;
-	std::array<bool,NUM_SIDES> sideChanged;
 };
 
 void getSurfaceBoxes(
 	const Mesh& mesh, 
 	const Grid& grid,
 	mv::vector3<GridCell>& gridCells, 
-	std::vector<std::unique_ptr<MeshBox>>& meshBoxes);
+	int numPrinters);
+	//std::vector<std::unique_ptr<MeshBox>>& meshBoxes);
 
-void getChildrenFromSide(
+/*void getChildrenFromSide(
 	mv::vector3<GridCell>& gridCells, 
 	MeshBox* meshBox, 
 	std::vector<GridCell*>& children, 
-	int sideIndex);
+	int sideIndex);*/
 
 void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child);
 
-void getUniqueMeshBoxes(
+/*void getUniqueMeshBoxes(
 	mv::vector3<GridCell>& gridCells, 
 	std::vector<MeshBox*>& meshBoxes,
 	int sideIndex);
@@ -72,4 +67,4 @@ size_t numParents(mv::vector3<GridCell>& gridCells, int sideIndex);
 void printParents(mv::vector3<GridCell>& gridCells);
 
 void printParents(mv::vector3<GridCell>& gridCells, int sideIndex);
-
+*/

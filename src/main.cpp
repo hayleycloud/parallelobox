@@ -4,8 +4,9 @@
 #include "meshbox.h"
 #include "symmetry.h"
 #include "align.h"
-#include "blockmerge.h"
+//#include "blockmerge.h"
 #include "clustering.h"
+#include "regiongrowth.h"
 #include "multivec.h"
 
 #include <sstream>
@@ -14,12 +15,12 @@
 
 namespace fs = std::filesystem;
 
-std::vector<MeshBox*> getSourceMeshBoxesFrom(
+std::vector<std::unique_ptr<MeshBox>> getSourceMeshBoxesFrom(
 	const std::vector<Cluster>& clusters, 
 	const Grid& grid,
 	mv::vector3<GridCell>& gridCells)
 {
-	std::vector<MeshBox*> sourceMeshBoxes;
+	std::vector<std::unique_ptr<MeshBox>> sourceMeshBoxes;
 
 	for(const Cluster& cluster: clusters)
 	{
@@ -30,7 +31,11 @@ std::vector<MeshBox*> getSourceMeshBoxesFrom(
 		int offsetZ = std::floor(d.z() / grid.getElementSize());
 
 		GridCell& targetCell = mv::get(gridCells, offsetX, offsetY, offsetZ);
-		sourceMeshBoxes.push_back(targetCell.parent);
+		sourceMeshBoxes.emplace_back(std::make_unique<MeshBox>((MeshBox){
+			targetCell.mesh, 
+			Cuboid(targetCell.position, Vector3D(1, 1, 1)),
+			{ std::addressof(targetCell) }
+		}));
 	}
 
 	return sourceMeshBoxes;
@@ -83,8 +88,7 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 	Grid grid(size.x(), size.y(), size.z(), config.granularityScale);
 
 	mv::vector3<GridCell> gridCells;
-	std::vector<std::unique_ptr<MeshBox>> meshBoxes;
-    getSurfaceBoxes(mesh, grid, gridCells, meshBoxes);
+    getSurfaceBoxes(mesh, grid, gridCells, config.numPrinters);
 
 	/*mv::forEach<MeshBox>([](MeshBox& box) {
 		std::string type = "";
@@ -110,7 +114,7 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 				out.push_back(std::addressof(in));
 	}, meshBoxes);*/
 
-	const std::array<K::Vector_3,6> cardinalVecs = {
+	/*const std::array<K::Vector_3,6> cardinalVecs = {
 		K::Vector_3( 0,  1,  0),
 		K::Vector_3( 0, -1,  0),
 		K::Vector_3(-1,  0,  0),
@@ -141,12 +145,12 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 		}
 
 		//std::cout << bestOverhangArea << " of overhang." << std::endl;
-	}
+	}*/
 
 	std::vector<Cluster> clusters = getClusters(config.numPrinters, mesh);
 	verifyClusters(clusters, min, max);
-	std::vector<MeshBox*> srcMeshBoxes 
-		= getSourceMeshBoxesFrom(clusters, grid, gridCells);
+	std::vector<std::unique_ptr<MeshBox>> meshBoxes = 
+		getSourceMeshBoxesFrom(clusters, grid, gridCells);
 
 	/*mv::vector3<MeshBox*> meshBoxRefs = mv::map<MeshBox,MeshBox*>(
 		[](MeshBox& meshBox) -> MeshBox* {

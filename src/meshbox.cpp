@@ -24,8 +24,9 @@ GridCell::ContentType determineContentType(
 void getSurfaceBoxes(
 	const Mesh& mesh, 
 	const Grid& grid, 
-	mv::vector3<GridCell>& gridCells, 
-	std::vector<std::unique_ptr<MeshBox>>& meshBoxes)
+	mv::vector3<GridCell>& gridCells,
+	int numPrinters)
+	//std::vector<std::unique_ptr<MeshBox>>& meshBoxes)
 {
 	gridCells.resize(grid.getNumBoxesZ());
 	
@@ -53,12 +54,12 @@ void getSurfaceBoxes(
 					Vector3D(x, y, z),
 					contentType == GridCell::ContentType::Boundary ?
 						volMesh : surfMesh, 
-					nullptr, 
-					std::array<MeshBox*,NUM_SIDES>(),
+					std::vector<MeshBox*>(), 
+					//std::array<MeshBox*,NUM_SIDES>(),
 					contentType 
 				};
 
-				if(contentType == GridCell::ContentType::Boundary)
+				/*if(contentType == GridCell::ContentType::Boundary)
 				{
                     #pragma omp critical
 					meshBoxes.emplace_back(std::make_unique<MeshBox>((MeshBox){
@@ -71,7 +72,7 @@ void getSurfaceBoxes(
 					gridCells[z][y][x].parent = meshBoxes.back().get();
 					for(auto& sideParent: gridCells[z][y][x].sideParents)
 						sideParent = gridCells[z][y][x].parent;
-				}
+				}*/
 			}
 		}
 	}
@@ -105,7 +106,7 @@ Cuboid getDimsFrom(std::vector<GridCell*>& children)
 	return Cuboid(min, size);
 }
 
-void getChildrenFromSide(
+/*void getChildrenFromSide(
 	mv::vector3<GridCell>& gridCells, 
 	MeshBox* meshBox, 
 	std::vector<GridCell*>& children, 
@@ -122,7 +123,7 @@ void reparentChildrenForSide(
 {
 	for(GridCell* child: children)
 		child->sideParents[sideIndex] = parent;
-}
+}*/
 
 void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child)
 {
@@ -146,7 +147,7 @@ void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child)
 	PMP::clip(child.mesh, bbox, CGAL::parameters::clip_volume(true));
 }
 
-void getUniqueMeshBoxes(
+/*void getUniqueMeshBoxes(
 	mv::vector3<GridCell>& gridCells, 
 	std::vector<MeshBox*>& meshBoxes,
 	int sideIndex)
@@ -256,3 +257,4 @@ void printParents(mv::vector3<GridCell>& gridCells, int sideIndex)
 		//parent->children.push_back(std::addressof(cell));
 	}, gridCells);
 }
+*/
