@@ -36,6 +36,25 @@ std::vector<MeshBox*> getSourceMeshBoxesFrom(
 	return sourceMeshBoxes;
 }
 
+void verifyClusters(
+	const std::vector<Cluster>& clusters,
+	const K::Point_3& min, const K::Point_3& max)
+{
+	for(const Cluster& cluster: clusters)
+	{
+		const K::Point_3& centroid = cluster.centroid;
+		if(centroid.x() > min.x() && centroid.x() < max.y()
+			&& centroid.y() > min.y() && centroid.y() < max.y()
+			&& centroid.z() > min.z() && centroid.z() < max.z())
+		{
+		}
+		else 
+		{
+			std::cerr << "Error!!!!!" << std::endl;
+		}
+	}
+}
+
 void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 {
 	recenter(mesh);
@@ -44,14 +63,14 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 	
 	alignMeshToGrid(mesh);
 
-	out.push_back(mesh);
+	//out.push_back(mesh);
 
 	K::Point_3 min, max;
 	bounds(mesh, min, max);
 
 	std::cout << "Min: " << min << ", Max: " << max << std::endl;
 
-	min = min - K::Vector_3(1.0, 1.0, 1.0);
+	min = min - K::Vector_3(2.0, 2.0, 2.0);
 	max = max + K::Vector_3(1.0, 1.0, 1.0);
 	K::Vector_3 size(max.x() - min.x(), max.y() - min.y(), max.z() - min.z());
 
@@ -64,7 +83,7 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 	Grid grid(size.x(), size.y(), size.z(), config.granularityScale);
 
 	mv::vector3<GridCell> gridCells;
-	std::list<std::unique_ptr<MeshBox>> meshBoxes;
+	std::vector<std::unique_ptr<MeshBox>> meshBoxes;
     getSurfaceBoxes(mesh, grid, gridCells, meshBoxes);
 
 	/*mv::forEach<MeshBox>([](MeshBox& box) {
@@ -125,6 +144,7 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 	}
 
 	std::vector<Cluster> clusters = getClusters(config.numPrinters, mesh);
+	verifyClusters(clusters, min, max);
 	std::vector<MeshBox*> srcMeshBoxes 
 		= getSourceMeshBoxesFrom(clusters, grid, gridCells);
 
@@ -136,10 +156,10 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 				return &meshBox;
 	}, meshBoxes);*/
 
-	mergeIterate(config, mesh, grid, gridCells, meshBoxes);
+	//mergeIterate(config, mesh, grid, gridCells, meshBoxes);
 
-	for(auto& meshBox: meshBoxes)
-		out.push_back(meshBox->mesh);
+	//for(auto& meshBox: meshBoxes)
+	//	out.push_back(meshBox->mesh);
 }
 
 int run(int argc, const char* argv[])

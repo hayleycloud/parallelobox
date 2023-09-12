@@ -126,8 +126,8 @@ std::vector<Cluster> getClusters(int k, const Mesh& mesh)
 	bool converged = false;
 	while(!converged)
 	{
-		std::cout << "k-Means Iteration " << itrNum << std::endl;
-		printClusters(clusters);
+		//std::cout << "k-Means Iteration " << itrNum << std::endl;
+		//printClusters(clusters);
 
 		std::vector<K::Point_3> meanPositions = 
 			getClusterMeanPositions(mesh, clusters);
