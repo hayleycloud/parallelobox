@@ -36,6 +36,7 @@ std::vector<std::unique_ptr<MeshBox>> getSourceMeshBoxesFrom(
 			Cuboid(targetCell.position, Vector3D(1, 1, 1)),
 			{ std::addressof(targetCell) }
 		}));
+		targetCell.parents.push_back(sourceMeshBoxes.back().get());
 	}
 
 	return sourceMeshBoxes;
@@ -48,15 +49,12 @@ void verifyClusters(
 	for(const Cluster& cluster: clusters)
 	{
 		const K::Point_3& centroid = cluster.centroid;
-		if(centroid.x() > min.x() && centroid.x() < max.y()
+		if(    centroid.x() > min.x() && centroid.x() < max.x()
 			&& centroid.y() > min.y() && centroid.y() < max.y()
 			&& centroid.z() > min.z() && centroid.z() < max.z())
-		{
-		}
+		{}
 		else 
-		{
-			std::cerr << "Error!!!!!" << std::endl;
-		}
+			throw std::runtime_error("Cluster centroid outside of mesh!");
 	}
 }
 
@@ -75,9 +73,8 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 
 	std::cout << "Min: " << min << ", Max: " << max << std::endl;
 
-	min = min - K::Vector_3(2.0, 2.0, 2.0);
+	min = min - K::Vector_3(1.0, 1.0, 1.0);
 	max = max + K::Vector_3(1.0, 1.0, 1.0);
-	K::Vector_3 size(max.x() - min.x(), max.y() - min.y(), max.z() - min.z());
 
 	auto fnormals = mesh.add_property_map<face_descriptor, K::Vector_3>(
 		"f:normals", CGAL::NULL_VECTOR).first;
@@ -85,7 +82,7 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 
 	std::cout << "Computed normals." << std::endl;
 
-	Grid grid(size.x(), size.y(), size.z(), config.granularityScale);
+	Grid grid(min, max, config.granularityScale);
 
 	mv::vector3<GridCell> gridCells;
     getSurfaceBoxes(mesh, grid, gridCells, config.numPrinters);
@@ -151,6 +148,8 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 	verifyClusters(clusters, min, max);
 	std::vector<std::unique_ptr<MeshBox>> meshBoxes = 
 		getSourceMeshBoxesFrom(clusters, grid, gridCells);
+
+	regionGrowth(mesh, meshBoxes, gridCells, grid);
 
 	/*mv::vector3<MeshBox*> meshBoxRefs = mv::map<MeshBox,MeshBox*>(
 		[](MeshBox& meshBox) -> MeshBox* {

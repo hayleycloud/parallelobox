@@ -10,7 +10,7 @@ public:
 		size_t x, y, z;
 	};
 
-	Grid(double width, double height, double thickness, double granularity);
+	Grid(const K::Point_3& min, const K::Point_3& max, double granularity);
 
 	[[nodiscard]] size_t getNumBoxesX() const { return m_NumBoxesX; }
 
@@ -41,6 +41,7 @@ public:
 	void clipSurface(Mesh& mesh, const Coord& coord) const;
 
 private:
+	const double m_Width, m_Height, m_Depth;
 	const double m_ElementSize;
 	const size_t m_NumBoxesX, m_NumBoxesY, m_NumBoxesZ;
 	const size_t m_ZStride, m_YStride;

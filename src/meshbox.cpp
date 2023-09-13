@@ -54,7 +54,7 @@ void getSurfaceBoxes(
 					Vector3D(x, y, z),
 					contentType == GridCell::ContentType::Boundary ?
 						volMesh : surfMesh, 
-					std::vector<MeshBox*>(), 
+					{}, 
 					//std::array<MeshBox*,NUM_SIDES>(),
 					contentType 
 				};

@@ -2,14 +2,17 @@
 
 #include <omp.h>
 
-Grid::Grid(double width, double height, double thickness, double granularity)
-: m_ElementSize(std::cbrt((width * height * thickness) * granularity)),
-  m_NumBoxesX(std::ceil(width / m_ElementSize)),
-  m_NumBoxesY(std::ceil(height / m_ElementSize)),
-  m_NumBoxesZ(std::ceil(thickness / m_ElementSize)),
+Grid::Grid(const K::Point_3& min, const K::Point_3& max, double granularity)
+: m_Width(std::abs(max.x() - min.x())),
+  m_Height(std::abs(max.y() - min.y())),
+  m_Depth(std::abs(max.z() - min.z())),
+  m_ElementSize(std::cbrt((m_Width * m_Height * m_Depth) * granularity)),
+  m_NumBoxesX(std::ceil(m_Width / m_ElementSize)),
+  m_NumBoxesY(std::ceil(m_Height / m_ElementSize)),
+  m_NumBoxesZ(std::ceil(m_Depth / m_ElementSize)),
   m_ZStride(m_NumBoxesX * m_NumBoxesY),
   m_YStride(m_NumBoxesX),
-  m_Origin(width * -0.5, height * -0.5, thickness * -0.5)
+  m_Origin(min)
 {
 	const size_t numBoxes = m_NumBoxesX * m_NumBoxesY * m_NumBoxesZ;
 

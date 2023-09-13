@@ -4,21 +4,6 @@
 #include <unordered_map>
 #include <optional>
 
-[[nodiscard]]
-bool continueRegionGrowth(
-	std::vector<MeshBox*>& sourceBoxes, mv::vector3<GridCell>& gridCells)
-{
-	// If we can find a boundary box with no parent, we still have expansion to do
-	const auto* pendingMeshCell = mv::find<GridCell>([](const GridCell& cell) {
-		if(cell.type == GridCell::ContentType::Boundary)
-			return cell.parents.size() > 0;
-
-		return false;
-	}, gridCells);
-
-	return pendingMeshCell;
-}
-
 void addCellsToMeshBox(
 	mv::vector3<GridCell>& gridCells, 
 	MeshBox& box,
@@ -162,9 +147,25 @@ Direction getBestDirection(const std::unordered_map<Direction,double>& scores)
 	return *bestDir;
 }
 
+[[nodiscard]]
+bool continueRegionGrowth(
+	std::vector<std::unique_ptr<MeshBox>>& sourceBoxes, 
+	mv::vector3<GridCell>& gridCells)
+{
+	// If we can find a boundary box with no parent, we still have expansion to do
+	const auto* pendingMeshCell = mv::find<GridCell>([](const GridCell& cell) {
+		if(cell.type == GridCell::ContentType::Boundary)
+			return cell.parents.size() > 0;
+
+		return false;
+	}, gridCells);
+
+	return pendingMeshCell;
+}
+
 void regionGrowth(
 	const Mesh& parent,
-	std::vector<MeshBox*>& sourceBoxes, 
+	std::vector<std::unique_ptr<MeshBox>>& sourceBoxes, 
 	mv::vector3<GridCell>& gridCells,
 	Grid& grid)
 {
@@ -179,13 +180,16 @@ void regionGrowth(
 		// Enumerate best directions of growth
 		std::vector<MeshBoxGrow> expandDirections;
 		#pragma omp parallel for
-		for(MeshBox* sourceBox: sourceBoxes)
+		for(auto& sourceBox: sourceBoxes)
 		{
 			std::unordered_map<Direction,double> scores;
+			
+			// TODO: Compute region growth scores here
 
 			Direction bestDirection = getBestDirection(scores);
 			#pragma omp critical
-			expandDirections.push_back((MeshBoxGrow){sourceBox, bestDirection});
+			expandDirections.push_back((MeshBoxGrow){
+				sourceBox.get(), bestDirection});
 		}
 
 		// Apply region growth
@@ -199,7 +203,7 @@ void regionGrowth(
 		// Recompute meshes
 		// (Not sure if necessary, but for sanity at this stage)
 		#pragma omp parallel for
-		for(MeshBox* sourceBox: sourceBoxes)
+		for(auto& sourceBox: sourceBoxes)
 			clipFromMesh(grid, parent, *sourceBox);
 	}
 }
