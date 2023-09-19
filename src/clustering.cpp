@@ -45,9 +45,10 @@ bool indexAlreadyExists(int index, const std::vector<unsigned int>& indices)
 
 void assignVerticesToClusters(const Mesh& mesh, std::vector<Cluster>& clusters)
 {
-	int index = 0;
-	for(const K::Point_3& p: mesh.points())
+	for(Mesh::Vertex_index vIndex: mesh.vertices())
 	{
+		const K::Point_3& p = mesh.point(vIndex);
+
 		double bestL2Norm = std::numeric_limits<double>::max();
 		Cluster* bestCluster = nullptr;
 
@@ -62,9 +63,7 @@ void assignVerticesToClusters(const Mesh& mesh, std::vector<Cluster>& clusters)
 		}
 
 		assert(bestCluster);
-		bestCluster->vertices.push_back(index);
-
-		++index;
+		bestCluster->vertices.push_back(vIndex);
 	}
 }
 
@@ -73,10 +72,10 @@ K::Point_3 getClusterMeanPos(const Mesh& mesh, const Cluster& cluster)
 {
 	const double numIndices = static_cast<double>(cluster.vertices.size());
 
-	double xSum, ySum, zSum;
-	for(int index: cluster.vertices)
+	double xSum = 0.0, ySum = 0.0, zSum = 0.0;
+	for(Mesh::Vertex_index index: cluster.vertices)
 	{
-		const K::Point_3& p = mesh.point(Mesh::Vertex_index(index));
+		const K::Point_3& p = mesh.point(index);
 		xSum += p.x();
 		ySum += p.y();
 		zSum += p.z();

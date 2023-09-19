@@ -5,7 +5,7 @@
 struct Cluster
 {
 	K::Point_3 centroid;
-	std::vector<int> vertices;
+	std::vector<Mesh::Vertex_index> vertices;
 };
 
 [[nodiscard]] std::vector<Cluster> getClusters(int k, const Mesh& mesh);

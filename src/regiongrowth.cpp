@@ -20,7 +20,8 @@ void addCellsToMeshBox(
 
 				assert(cell);
 				assert(std::find(
-					cell->parents.cbegin(), cell->parents.cend(), boxPtr));
+					cell->parents.cbegin(), cell->parents.cend(), boxPtr)
+						== cell->parents.cend());
 
 				box.children.push_back(cell);
 				cell->parents.push_back(boxPtr);

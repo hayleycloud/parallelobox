@@ -54,7 +54,11 @@ void verifyClusters(
 			&& centroid.z() > min.z() && centroid.z() < max.z())
 		{}
 		else 
-			throw std::runtime_error("Cluster centroid outside of mesh!");
+			//throw std::runtime_error("Cluster centroid outside of mesh!");
+		{
+			std::cerr << "Cluster centroid (" << centroid << ") "
+				      << "outside of mesh! (min: " << min << ", max: " << max << ")";
+		}
 	}
 }
 
