@@ -1,10 +1,15 @@
 #include "resolve.h"
 
+struct ShrinkOp
+{
+	Direction direction;
+	unsigned int quantity;
+};
+
 struct OperationAction
 {
 	MeshBox& target;
-	Direction direction;
-	unsigned int quantity;
+	ShrinkOp action;
 };
 
 typedef std::vector<OperationAction> Operation;
@@ -12,27 +17,17 @@ typedef std::vector<OperationAction> Operation;
 class ConflictGraph
 {
 public:
-	struct Node;
-	struct Branch;
-
-	struct SubNode
-	{
-		const Node* parent;
-		std::vector<Branch*> branches;
-
-		SubNode(const Node* parent) : parent(parent) {}
-	};
+	//struct Branch;
 
 	struct Node
 	{
 		const MeshBox& meshBox;
-		std::array<SubNode,6> directions;
 	};
 
 	struct Branch
 	{
-		const SubNode& node1;
-		const SubNode& node2;
+		const Node& node1;
+		const Node& node2;
 
 		Cuboid region;
 	};
@@ -41,26 +36,30 @@ public:
 		std::vector<std::unique_ptr<MeshBox>>& sourceBoxes, 
 		mv::vector3<GridCell>& gridCells);
 
-	std::list<Operation> getResolutionOperations();
+	[[nodiscard]] std::list<Operation> getResolutionOperations();
+
+	friend ostream& operator<<(ostream& stream, const ConflictGraph& graph);
 
 private:
 	std::vector<Node> m_Nodes;
-	std::vector<std::unique_ptr<Branch>> m_Branches;
-
-	std::array<SubNode,6> createSubNodesFor(const Node& node) const;
+	std::vector<Branch> m_Branches;
 
 	void constructNodesFrom(std::vector<std::unique_ptr<MeshBox>>& boxes);
 
 	void enumerateBranches();
 
 	[[nodiscard]] bool alreadyExists(
-		const std::vector<std::unique_ptr<Branch>>& branches,
-		const SubNode& node1, 
-		const SubNode& node2) 
+		const std::vector<Branch>& branches,
+		const Node& node1, 
+		const Node& node2) 
 		const;
 
 	[[nodiscard]] std::optional<Cuboid> getOverlapRegion(
 		const Node& node1, const Node& node2) const;
+
+	[[nodiscard]] Operation getResolutionFor(Branch& branch);
+
+	const ostream& operator<<(const ostream& stream) const;
 
 	// TODO: Assign nodes and subnodes from mesh boxes
 	// TODO: Enumerate overlaps from mesh box cuboid data
@@ -76,26 +75,12 @@ ConflictGraph::ConflictGraph(
 	enumerateBranches();
 }
 
-std::array<ConflictGraph::SubNode,6> 
-ConflictGraph::createSubNodesFor(const Node& node) const
-{
-	return {
-		SubNode(&node),
-		SubNode(&node),
-		SubNode(&node),
-		SubNode(&node),
-		SubNode(&node),
-		SubNode(&node)
-	};
-}
-
 void ConflictGraph::constructNodesFrom(
 	std::vector<std::unique_ptr<MeshBox>>& boxes)
 {
 	for(auto& box: boxes)
 	{
-		m_Nodes.emplace_back((Node){ *box, {} });
-		m_Nodes.back().directions = createSubNodesFor(m_Nodes.back());
+		m_Nodes.emplace_back((Node){ *box });
 	}
 }
 
@@ -114,26 +99,26 @@ void ConflictGraph::enumerateBranches()
 			std::optional<Cuboid> overlapRegion = getOverlapRegion(node, other);
 			if(overlapRegion)
 			{
-
-				m_Branches.push_back(std::make_unique<Branch>((Branch){
-					node, other, *overlapRegion }));
+				m_Branches.push_back((Branch) {
+					node, other, *overlapRegion }
+				);
 			}
 		}
 	}
 }
 
 bool ConflictGraph::alreadyExists(
-	const std::vector<std::unique_ptr<Branch>>& branches,
-	const SubNode& node1, 
-	const SubNode& node2) 
+	const std::vector<Branch>& branches,
+	const Node& node1, 
+	const Node& node2) 
 	const
 {
 	for(const auto& branch: branches)
 	{
-		const SubNode* node1Ptr = std::addressof(node1);
-		const SubNode* node2Ptr = std::addressof(node2);
-		const SubNode* branchNode1Ptr = std::addressof(branch->node1);
-		const SubNode* branchNode2Ptr = std::addressof(branch->node2);
+		const Node* node1Ptr = std::addressof(node1);
+		const Node* node2Ptr = std::addressof(node2);
+		const Node* branchNode1Ptr = std::addressof(branch.node1);
+		const Node* branchNode2Ptr = std::addressof(branch.node2);
 
 		if((branchNode1Ptr == node1Ptr && branchNode2Ptr == node2Ptr) ||
 		   (branchNode2Ptr == node1Ptr && branchNode1Ptr == node2Ptr))
@@ -183,9 +168,54 @@ std::optional<Cuboid> ConflictGraph::getOverlapRegion(
 
 std::list<Operation> ConflictGraph::getResolutionOperations()
 {
+	std::list<Operation> resolutionOps;
+
+	for(Branch& branch: m_Branches)
+	{
+		std::vector<OperationAction> actions = getResolutionFor(branch);
+	}
+
+	return resolutionOps;
+}
+
+Operation ConflictGraph::getResolutionFor(Branch& branch)
+{
+	if(branch.node
+}
+
+std::vector<ShrinkOp>
+ConflictGraph::getResolutionFor(Node& node, Cuboid region)
+{
+	if(region.origin.x > node.meshBox.dims.x)
+		
 
 }
 
+ostream& operator<<(ostream& stream, const ConflictGraph& graph)
+{
+	std::unordered_map<const ConflictGraph::Node*,int> idMap;
+	for(int i = 0; i < graph.m_Nodes.size(); ++i)
+		idMap[graph.m_Nodes.at(i)] = i;
+
+	for(int i = 0; i < graph.m_Branches.size(); ++i)
+	{
+		const ConflictGraph::Branch& branch = graph.m_Branches.at(i);
+		stream << "Branch " << i << " (" << std::endl;
+		stream << "Node " << idMap.at(branch.node1) << " to ";
+		stream << "Node " << idMap.at(branch.node2) << "):" << std::endl;
+
+		stream << "\tRegion: " 
+			<< "[ origin: (" 
+			<< branch.region.origin.x << "," 
+			<< branch.region.origin.y << ","
+			<< branch.region.origin.z << "), size: ("
+			<< branch.region.size.x << ","
+			<< branch.region.size.y << ","
+			<< branch.region.size.z << ")]" << std::endl;
+	}
+
+	return stream;
+}
 
 void resolveConflicts(
 	const Mesh& parent,
