@@ -7,6 +7,7 @@
 //#include "blockmerge.h"
 #include "clustering.h"
 #include "regiongrowth.h"
+#include "resolve.h"
 #include "multivec.h"
 
 #include <sstream>
@@ -154,6 +155,8 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 		getSourceMeshBoxesFrom(clusters, grid, gridCells);
 
 	regionGrowth(mesh, meshBoxes, gridCells, grid);
+
+	resolveConflicts(mesh, meshBoxes, gridCells, grid);
 
 	/*mv::vector3<MeshBox*> meshBoxRefs = mv::map<MeshBox,MeshBox*>(
 		[](MeshBox& meshBox) -> MeshBox* {

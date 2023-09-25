@@ -28,5 +28,9 @@ struct Cuboid
 
 	Vector3D origin;	// Top Left Back (0, 0, 0)
 	Vector3D size;
+
+	Vector3D end() const {
+		return origin + size;
+	}
 };
 
