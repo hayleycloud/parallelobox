@@ -148,6 +148,155 @@ Direction getBestDirection(const std::unordered_map<Direction,double>& scores)
 	return *bestDir;
 }
 
+void sampleCells(
+	mv::vector3<GridCell>& gridCells, 
+	const Cuboid& cuboid,
+	std::vector<GridCell*>& samples) 
+{
+    for(int x = 0; x < cuboid.size.x; x++) 
+	{
+		int X = cuboid.origin.x + x;
+        for(int y = 0; y < cuboid.size.y; y++) 
+		{
+			int Y = cuboid.origin.y + y;
+            for(int z = 0; z < cuboid.size.z; z++) 
+			{
+				int Z = cuboid.origin.z + z;
+
+				GridCell* cell = std::addressof(mv::get(gridCells, X, Y, Z));
+
+				assert(cell);
+				samples.push_back(cell);
+            }
+        }
+    }
+}
+
+std::optional<Cuboid> extendRegionIn(
+	Direction direction, Cuboid cuboid, const Grid& grid)
+{
+	switch(direction)
+	{
+		case Direction::Left:
+		{
+			if(cuboid.dims.origin.x == 0)
+				return std::nullopt;
+
+			--cuboid.dims.origin.x;
+			++cuboid.dims.size.x;
+		}
+		break;                                                      
+		case Direction::Right:                                          
+		{
+			++cuboid.dims.size.x;
+			if(cuboid.dims.end().x >= grid.getWidth())
+				return std::nullopt;
+		}
+		break;                                                 
+		case Direction::Up:                                             
+		{
+			++cuboid.dims.size.y;
+			if(cuboid.dims.end().y >= grid.getHeight())
+				return std::nullopt;
+		}
+		break;                                                      
+		case Direction::Down:                                         
+		{
+			if(cuboid.dims.origin.y == 0)
+				return std::nullopt;
+
+			--cuboid.dims.origin.y;
+			++cuboid.dims.size.y;
+		}
+		break;                                                      
+		case Direction::In:                                             
+		{
+			++cuboid.dims.size.z;
+			if(cuboid.dims.end().z >= grid.getDepth())
+				return std::nullopt;
+		}
+		break;                                                      
+		case Direction::Out:                                            
+		{
+			if(cuboid.dims.origin.z == 0)
+				return std::nullopt;
+
+			--cuboid.dims.origin.z;
+			++cuboid.dims.size.z;
+		}
+		break;
+	}
+
+	return cuboid;
+}
+
+[[nodiscard]] size_t enumerateBoundaries(
+	size_t& accum, const GridCell* cell)
+{
+	if(cell.type == GridCell::ContentType::Boundary)
+		++accum;
+	return accum;
+}
+
+[[nodiscard]] double l2nSq(const Vector3D& a, const Vector3D& b)
+{
+	const Vector3D c = a - b;
+	return (c.x * c.x) + (c.y * c.y) + (c.z * c.z);
+}
+
+[[nodiscard]] double l2n(const Vector3D& a, const Vector3D& b)
+{
+	return std::sqrt(l2nSq(a, b));
+}
+
+[[nodiscard]] double proximityScore(
+	const MeshBox& region1, const MeshBox& region2)
+{
+	const Vector3D centroid1 = region1.dims.origin + Vector3D(
+		region1.dims.size.x / 2, region1.dims.size.y / 2, region1.dims.size.z / 2);
+	const Vector3D centroid2 = region2.dims.origin + Vector3D(
+		region2.dims.size.x / 2, region2.dims.size.y / 2, region2.dims.size.z / 2);
+	
+	return l2nSq(centroid1, centroid2);
+}
+
+[[nodiscard]] double computeScore(
+	Direction direction, 
+	const MeshBox& region,
+	const std::vector<std::unique_ptr<MeshBox>>& regions, 
+	const Grid& grid,
+	mv::vector3<GridCell>& gridCells)
+{
+	// Prohibition of Discontinuities
+	///////////////////////////////////////////////////////////////////////////
+	
+	std::optional<Cuboid> newRegion = extendRegionIn(direction, region.dims);
+	if(!newRegion)
+		return 0;
+
+	std::vector<GridCell*> samplesOld, samplesNew;
+	sampleCells(gridCells, region.dims, samplesOld);
+	sampleCells(gridCells, newRegion, samplesNew);
+
+	size_t numBoxesOld = mv::reduce(enumerateBoundaries, samplesOld);
+	size_t numBoxesNew = mv::reduce(enumerateBoundaries, samplesNew);
+
+	if(numBoxesOld == numBoxesNew)
+		return 0;
+
+	// Penalisation of Proximity
+	///////////////////////////////////////////////////////////////////////////
+	
+	double proxScore = proximityScore(region, );
+
+	// Penalisation of Overhang
+	///////////////////////////////////////////////////////////////////////////
+	
+	double overhangScore = 
+
+	return proxScore;
+}
+
 [[nodiscard]]
 bool continueRegionGrowth(
 	std::vector<std::unique_ptr<MeshBox>>& sourceBoxes, 
@@ -185,7 +334,17 @@ void regionGrowth(
 		{
 			std::unordered_map<Direction,double> scores;
 			
-			// TODO: Compute region growth scores here
+			const std::array<Direction,6> directions = {
+				Direction::Left, Direction::Right,
+				Direction::Up, Direction::Down,
+				Direction::In, Direction::Out
+			};
+
+			for(Direction direction: directions)
+			{
+				scores[direction] = computeScore(
+					direction, sourceBox, sourceBoxes, gridCells, grid);
+			}
 
 			Direction bestDirection = getBestDirection(scores);
 			#pragma omp critical
