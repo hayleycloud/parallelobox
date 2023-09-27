@@ -20,7 +20,7 @@ double printingCost(const Config& config, const Mesh& mesh)
 	return volumeCost + surfaceCost;
 }
 
-double fitsVolumeCost(const Config& config, const Mesh& mesh)
+bool fitsVolume(const Config& config, const Mesh& mesh)
 {
 	K::Point_3 min, max;
 	bounds(mesh, min, max);
@@ -32,9 +32,9 @@ double fitsVolumeCost(const Config& config, const Mesh& mesh)
 	if(width < config.printer.volume.width &&
 	   height < config.printer.volume.height &&
 	   depth < config.printer.volume.depth)
-		return 0.0;
+		return true;
 	else
-		return 1000000.0;
+		return false;
 }
 
 double fitness(const Config& config, const Mesh& mesh)

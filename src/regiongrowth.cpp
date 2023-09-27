@@ -240,7 +240,7 @@ std::optional<Cuboid> extendRegionIn(
 
 [[nodiscard]] double l2nSq(const Vector3D& a, const Vector3D& b)
 {
-	const Vector3D c = a - b;
+	const Vector3D c = b - a;
 	return (c.x * c.x) + (c.y * c.y) + (c.z * c.z);
 }
 
@@ -250,23 +250,60 @@ std::optional<Cuboid> extendRegionIn(
 }
 
 [[nodiscard]] double proximityScore(
-	const MeshBox& region1, const MeshBox& region2)
+	Direction direction, const MeshBox& region1, const MeshBox& region2)
 {
 	const Vector3D centroid1 = region1.dims.origin + Vector3D(
 		region1.dims.size.x / 2, region1.dims.size.y / 2, region1.dims.size.z / 2);
 	const Vector3D centroid2 = region2.dims.origin + Vector3D(
 		region2.dims.size.x / 2, region2.dims.size.y / 2, region2.dims.size.z / 2);
+
+	const Vector3D delta = centroid2 - centroid1;
+	switch(direction)
+	{
+		case Direction::Left:
+			if(delta.x >= 0)
+				return 0;
+			break;
+		case Direction::Right:
+			if(delta.x <= 0)
+				return 0;
+			break;
+		case Direction::Up:
+			if(delta.y <= 0)
+				return 0;
+			break;
+		case Direction::Down:
+			if(delta.y >= 0)
+				return 0;
+			break;
+		case Direction::In:
+			if(delta.z <= 0)
+				return 0;
+			break;
+		case Direction::Out:
+			if(delta.z >= 0)
+				return 0;
+			break;
+	}
 	
 	return l2nSq(centroid1, centroid2);
 }
 
 [[nodiscard]] double computeScore(
+	const Config& config,
+	const Mesh& parent,
 	Direction direction, 
 	const MeshBox& region,
 	const std::vector<std::unique_ptr<MeshBox>>& regions, 
 	const Grid& grid,
 	mv::vector3<GridCell>& gridCells)
 {
+	// TODO: Best objective: higher or lower?
+	// Bigger distance = better
+	// Bigger area/surf = better
+	// Bigger overhang = worse
+	// So maybe higher is better?
+	
 	// Prohibition of Discontinuities
 	///////////////////////////////////////////////////////////////////////////
 	
@@ -284,17 +321,34 @@ std::optional<Cuboid> extendRegionIn(
 	if(numBoxesOld == numBoxesNew)
 		return 0;
 
+	// Compute new MeshBox
+	///////////////////////////////////////////////////////////////////////////
+	
+	MeshBox newMeshBox;
+	newMeshBox.dims = *newRegion;
+
+	clipFromMesh(grid, parent, newMeshBox);
+
 	// Penalisation of Proximity
 	///////////////////////////////////////////////////////////////////////////
 	
-	double proxScore = proximityScore(region, );
+	double proxScore = 0.0;
+	for(const auto& other: regions)
+		proxScore += proximityScore(direction, region, *other);
 
-	// Penalisation of Overhang
+	// Application of Standard Objective
+	// (Penalisation of Overhang, Incentivisation of Size)
 	///////////////////////////////////////////////////////////////////////////
 	
-	double overhangScore = 
+	if(!fitsVolume(config, newMeshBox.mesh))
+		return 0;
 
-	return proxScore;
+	double printCost = printingCost(config, newMeshBox.mesh);
+	double overhangCost = overhangCost();
+	// TODO: What the fuck is with our overhang function parameters?!??!
+	// TODO: Also: overhang area should be penalised! So, negate?
+
+	return proxScore + printCost + overhangCost;
 }
 
 [[nodiscard]]
@@ -314,6 +368,7 @@ bool continueRegionGrowth(
 }
 
 void regionGrowth(
+	const Config& config,
 	const Mesh& parent,
 	std::vector<std::unique_ptr<MeshBox>>& sourceBoxes, 
 	mv::vector3<GridCell>& gridCells,
@@ -343,7 +398,10 @@ void regionGrowth(
 			for(Direction direction: directions)
 			{
 				scores[direction] = computeScore(
-					direction, sourceBox, sourceBoxes, gridCells, grid);
+					config, parent,
+					direction, 
+					sourceBox, sourceBoxes, 
+					gridCells, grid);
 			}
 
 			Direction bestDirection = getBestDirection(scores);
