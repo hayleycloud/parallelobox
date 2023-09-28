@@ -43,7 +43,7 @@ double fitness(const Config& config, const Mesh& mesh)
 	if(printCost == 0.0)
 		return 0.0;
 
-	const double fitVolumeCost = fitsVolumeCost(config, mesh);
+	const double fitVolumeCost = fitsVolume(config, mesh);
 
 	return printCost + fitVolumeCost;
 }

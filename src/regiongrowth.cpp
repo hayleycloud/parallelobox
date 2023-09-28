@@ -179,50 +179,50 @@ std::optional<Cuboid> extendRegionIn(
 	{
 		case Direction::Left:
 		{
-			if(cuboid.dims.origin.x == 0)
+			if(cuboid.origin.x == 0)
 				return std::nullopt;
 
-			--cuboid.dims.origin.x;
-			++cuboid.dims.size.x;
+			--cuboid.origin.x;
+			++cuboid.size.x;
 		}
 		break;                                                      
 		case Direction::Right:                                          
 		{
-			++cuboid.dims.size.x;
-			if(cuboid.dims.end().x >= grid.getWidth())
+			++cuboid.size.x;
+			if(cuboid.end().x >= grid.getWidth())
 				return std::nullopt;
 		}
 		break;                                                 
 		case Direction::Up:                                             
 		{
-			++cuboid.dims.size.y;
-			if(cuboid.dims.end().y >= grid.getHeight())
+			++cuboid.size.y;
+			if(cuboid.end().y >= grid.getHeight())
 				return std::nullopt;
 		}
 		break;                                                      
 		case Direction::Down:                                         
 		{
-			if(cuboid.dims.origin.y == 0)
+			if(cuboid.origin.y == 0)
 				return std::nullopt;
 
-			--cuboid.dims.origin.y;
-			++cuboid.dims.size.y;
+			--cuboid.origin.y;
+			++cuboid.size.y;
 		}
 		break;                                                      
 		case Direction::In:                                             
 		{
-			++cuboid.dims.size.z;
-			if(cuboid.dims.end().z >= grid.getDepth())
+			++cuboid.size.z;
+			if(cuboid.end().z >= grid.getDepth())
 				return std::nullopt;
 		}
 		break;                                                      
 		case Direction::Out:                                            
 		{
-			if(cuboid.dims.origin.z == 0)
+			if(cuboid.origin.z == 0)
 				return std::nullopt;
 
-			--cuboid.dims.origin.z;
-			++cuboid.dims.size.z;
+			--cuboid.origin.z;
+			++cuboid.size.z;
 		}
 		break;
 	}
@@ -233,7 +233,7 @@ std::optional<Cuboid> extendRegionIn(
 [[nodiscard]] size_t enumerateBoundaries(
 	size_t& accum, const GridCell* cell)
 {
-	if(cell.type == GridCell::ContentType::Boundary)
+	if(cell->type == GridCell::ContentType::Boundary)
 		++accum;
 	return accum;
 }
@@ -307,13 +307,13 @@ std::optional<Cuboid> extendRegionIn(
 	// Prohibition of Discontinuities
 	///////////////////////////////////////////////////////////////////////////
 	
-	std::optional<Cuboid> newRegion = extendRegionIn(direction, region.dims);
+	std::optional<Cuboid> newRegion = extendRegionIn(direction, region.dims, grid);
 	if(!newRegion)
 		return 0;
 
 	std::vector<GridCell*> samplesOld, samplesNew;
 	sampleCells(gridCells, region.dims, samplesOld);
-	sampleCells(gridCells, newRegion, samplesNew);
+	sampleCells(gridCells, *newRegion, samplesNew);
 
 	size_t numBoxesOld = mv::reduce(enumerateBoundaries, samplesOld);
 	size_t numBoxesNew = mv::reduce(enumerateBoundaries, samplesNew);
@@ -324,8 +324,7 @@ std::optional<Cuboid> extendRegionIn(
 	// Compute new MeshBox
 	///////////////////////////////////////////////////////////////////////////
 	
-	MeshBox newMeshBox;
-	newMeshBox.dims = *newRegion;
+	MeshBox newMeshBox(*newRegion);
 
 	clipFromMesh(grid, parent, newMeshBox);
 
@@ -344,7 +343,7 @@ std::optional<Cuboid> extendRegionIn(
 		return 0;
 
 	double printCost = printingCost(config, newMeshBox.mesh);
-	double overhangCost = overhangCost();
+	double overhangCost = /*overhangCost()*/ 0.0;
 	// TODO: What the fuck is with our overhang function parameters?!??!
 	// TODO: Also: overhang area should be penalised! So, negate?
 
@@ -400,8 +399,8 @@ void regionGrowth(
 				scores[direction] = computeScore(
 					config, parent,
 					direction, 
-					sourceBox, sourceBoxes, 
-					gridCells, grid);
+					*sourceBox, sourceBoxes, 
+					grid, gridCells);
 			}
 
 			Direction bestDirection = getBestDirection(scores);

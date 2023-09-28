@@ -26,6 +26,18 @@ struct MeshBox
 	Mesh mesh;
 	Cuboid dims;
 	std::vector<GridCell*> children;
+
+	MeshBox(const Cuboid& dims) : dims(dims) {}
+
+	MeshBox(
+		const Mesh& mesh, 
+		const Cuboid& dims) : mesh(mesh), dims(dims) {}
+
+	MeshBox(
+		const Mesh& mesh,
+		const Cuboid& dims,
+		const std::vector<GridCell*>& children)
+		: mesh(mesh), dims(dims), children(children) {}
 };
 
 void getSurfaceBoxes(
