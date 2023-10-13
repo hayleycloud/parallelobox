@@ -26,6 +26,7 @@ add_executable(parallelobox
 	src/args.cpp 
 	src/config.cpp 
 	src/random.cpp
+	src/vec.cpp
 	src/clustering.cpp
 	src/grid_cut.cpp 
 	src/align.cpp 

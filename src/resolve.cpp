@@ -250,7 +250,7 @@ std::ostream& operator<<(std::ostream& strm, const ConflictGraph& graph)
 	return strm;
 }
 
-void removeMeshBoxCells(
+/*void removeMeshBoxCells(
 	MeshBox& box, 
 	std::function<bool(const Cuboid&,const Vector3D&)> test)
 {
@@ -369,7 +369,7 @@ bool shrink(GridPathed& gridCells, MeshBox& box, Direction direction)
 	}
 
 	return true;
-}
+}*/
 
 OperationAction getBestOperation(OperationActions& actions)
 {
@@ -380,7 +380,7 @@ OperationAction getBestOperation(OperationActions& actions)
 
 bool bestOperationSort(const OperationActions& a, const OperationActions& b)
 {
-
+	return true;
 }
 
 void resolveConflicts(
@@ -394,7 +394,7 @@ void resolveConflicts(
 	std::cout << graph << std::endl;
 
 	std::list<OperationActions> operations = graph.getResolutionOperations();
-	std::sort(operations.begin(), operations.end(), bestOperationSort);
+	operations.sort(bestOperationSort);
 
 
 }

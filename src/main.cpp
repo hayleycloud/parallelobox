@@ -16,6 +16,27 @@
 
 namespace fs = std::filesystem;
 
+std::string toText(Direction direction)
+{
+	switch(direction)
+	{
+		case Direction::Left:
+			return "Left";
+		case Direction::Right:
+			return "Right";
+		case Direction::Up:
+			return "Up";
+		case Direction::Down:
+			return "Down";
+		case Direction::In:
+			return "In";
+		case Direction::Out:
+			return "Out";
+	}
+
+	return "";
+}
+
 std::vector<std::unique_ptr<MeshBox>> getSourceMeshBoxesFrom(
 	const std::vector<Cluster>& clusters, 
 	const Grid& grid,
@@ -154,7 +175,7 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 	std::vector<std::unique_ptr<MeshBox>> meshBoxes = 
 		getSourceMeshBoxesFrom(clusters, grid, gridCells);
 
-	regionGrowth(mesh, meshBoxes, gridCells, grid);
+	regionGrowth(config, mesh, meshBoxes, gridCells, grid);
 
 	resolveConflicts(mesh, meshBoxes, gridCells, grid);
 

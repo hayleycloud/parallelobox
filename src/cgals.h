@@ -27,3 +27,5 @@ enum class Direction {
 	Left, Right, Up, Down, In, Out
 };
 
+std::string toText(Direction direction);
+

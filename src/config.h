@@ -27,6 +27,8 @@ struct Config
 	double granularityScale;
 
 	double infillRate;
+
+	double proximityFactor;
 };
 
 Config handleArguments(const Arguments& args);

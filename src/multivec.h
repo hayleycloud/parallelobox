@@ -138,9 +138,9 @@ vector3<T2> map(std::function<T2(T1&)> callback, vector3<T1>& data)
 
 template <class T1, class T2>
 T2 reduce(
-	std::function<void(T2&,T1&)> callback, vector3<T1>& data)
+	std::function<void(T2&,T1&)> callback, vector3<T1>& data, T2& init = T2())
 {
-	T2 out;
+	T2 out = init;
 
 	for(size_t z = 0; z < data.size(); ++z)
 	{
