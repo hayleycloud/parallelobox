@@ -29,6 +29,16 @@ struct Vector3D
 	friend std::ostream& operator<<(std::ostream& strm, const Vector3D& vec);
 };
 
+struct CuboidCrnr
+{
+	CuboidCrnr(const Vector3D& min, const Vector3D& max) : min(min), max(max) {}
+
+	Vector3D min, max;
+
+	friend std::ostream& operator<<(
+		std::ostream& strm, const CuboidCrnr& cuboid);
+};
+
 struct Cuboid
 {
 	Cuboid(const Vector3D& origin, const Vector3D& size)
@@ -43,6 +53,10 @@ struct Cuboid
 
 	Vector3D centroid() const {
 		return origin + Vector3D(size.x / 2, size.y / 2, size.z / 2);
+	}
+
+	CuboidCrnr corners() const {
+		return CuboidCrnr(origin, origin + size);
 	}
 
 	friend std::ostream& operator<<(std::ostream& strm, const Cuboid& cuboid);

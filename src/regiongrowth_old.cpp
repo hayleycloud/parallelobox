@@ -30,16 +30,6 @@
 //    }
 //}
 
-void printMeshBoxes(const std::vector<std::unique_ptr<MeshBox>>& meshboxes)
-{
-	int index = 1;
-	for(const auto& box: meshboxes)
-	{
-		std::cout << "Mesh Box " << index << ": " << box->dims.corners() << std::endl;
-		++index;
-	}
-}
-
 void addCellsToMeshBox(MeshBox& box, std::vector<GridCell*>& cells)
 {
 	//std::cout << "Hello? " << a << " " << b << std::endl;
@@ -577,73 +567,6 @@ Direction getBestDirection(const std::unordered_map<Direction,double>& scores)
 	return *bestDir;
 }
 
-void assignCellToBox(MeshBox& box, GridCell& cell)
-{
-	box.children.push_back(std::addressof(cell));
-	cell.parents.push_back(std::addressof(box));
-}
-
-void assignCellToNearestBox(
-	std::vector<std::unique_ptr<MeshBox>>& sourceBoxes, GridCell& cell)
-{
-	MeshBox* bestBox = nullptr;
-	size_t bestDist = std::numeric_limits<size_t>::max();
-	for(auto& box: sourceBoxes)
-	{
-		size_t dist = l1n(box->dims.origin, cell.position);
-		if((dist > 0) && (dist < bestDist))
-		{
-			bestDist = dist;
-			bestBox = box.get();
-		}
-	}
-
-	assert(bestBox);
-	assignCellToBox(*bestBox, cell);
-}
-
-void recomputeAABBs(std::vector<std::unique_ptr<MeshBox>>& boxes)
-{
-	for(auto& box: boxes)
-	{
-		Vector3D min = box->children[0]->position;
-		Vector3D max = box->children[0]->position;
-		for(GridCell* child: box->children)
-		{
-			assert(child);
-			if(child->position.x < min.x)
-				min.x = child->position.x;
-			if(child->position.x > max.x)
-				max.x = child->position.x;
-
-			if(child->position.y < min.y)
-				min.y = child->position.y;
-			if(child->position.y > max.y)
-				max.y = child->position.y;
-
-			if(child->position.z < min.z)
-				min.z = child->position.z;
-			if(child->position.z > max.z)
-				max.z = child->position.z;
-		}
-		box->dims = Cuboid(min, max - min);
-	}
-}
-
-void fastAssign(
-	std::vector<std::unique_ptr<MeshBox>>& sourceBoxes,
-	mv::vector3<GridCell>& gridCells)
-{
-	mv::forEach<GridCell>([&](GridCell& cell) {
-		if(cell.type == GridCell::ContentType::Boundary && cell.parents.empty())
-		{
-			assignCellToNearestBox(sourceBoxes, cell);
-		}
-	}, gridCells);
-
-	recomputeAABBs(sourceBoxes);
-}
-
 [[nodiscard]]
 bool continueRegionGrowth(
 	std::vector<std::unique_ptr<MeshBox>>& sourceBoxes, 
@@ -670,70 +593,67 @@ void regionGrowth(
 	mv::vector3<GridCell>& gridCells,
 	Grid& grid)
 {
-	fastAssign(sourceBoxes, gridCells);
-
-	#pragma omp parallel for default(none) shared(sourceBoxes, grid, parent)
-	for(auto& sourceBox: sourceBoxes)
+	struct MeshBoxGrow
 	{
-		clipFromMesh(grid, parent, *sourceBox);
-	}
+		MeshBox* meshBox;
+		Direction direction;
+	};
 
-	bool test = continueRegionGrowth(sourceBoxes, gridCells);
-	printMeshBoxes(sourceBoxes);
-
-
-	/*unsigned int iterNum = 1;
+	unsigned int iterNum = 1;
 	while(continueRegionGrowth(sourceBoxes, gridCells))
 	{
 		std::cout << "Region Growth Iteration " << iterNum << std::endl;
 
 		// Enumerate best directions of growth
+		std::vector<MeshBoxGrow> expandDirections;
 		// TODO: Enable parallelism
 		//#pragma omp parallel for
-		
-		MeshBox* worstBox = nullptr;
-		double worstCost = std::numeric_limits<double>::max();
 		for(auto& sourceBox: sourceBoxes)
 		{
-			double printCost = printingCost(config, sourceBox->mesh);
-			if(printCost < worstCost)
+			std::cout << "\tComputing score for " << sourceBox.get()
+					  << " " << sourceBox->dims
+					  << ":" << std::endl;
+
+			const std::array<Direction,6> directions = {
+				Direction::Left, Direction::Right,
+				Direction::Up, Direction::Down,
+				Direction::In, Direction::Out
+			};
+			std::unordered_map<Direction,double> scores;
+
+			for(Direction direction: directions)
 			{
-				worstBox = sourceBox.get();
-				worstCost = printCost;
+				double score = computeScore(
+					config, parent,
+					direction, 
+					*sourceBox, sourceBoxes, 
+					grid, gridCells);
+				scores[direction] = score;
 			}
+
+			Direction bestDirection = getBestDirection(scores);
+			if(scores[bestDirection] > 0.0)
+			{
+				std::cout << "\tBest Score: " << toText(bestDirection)
+						  << " = " << scores[bestDirection] << std::endl;
+				//#pragma omp critical
+				expandDirections.push_back((MeshBoxGrow){
+					sourceBox.get(), bestDirection});
+			}
+			else
+				std::cout << "\tNo possible directions detected." << std::endl;
 		}
 
-		std::cout << "\tComputing score for " << worstBox
-				  << " " << worstBox->dims
-				  << ":" << std::endl;
-
-		const std::array<Direction,6> directions = {
-			Direction::Left, Direction::Right,
-			Direction::Up, Direction::Down,
-			Direction::In, Direction::Out
-		};
-		std::unordered_map<Direction,double> scores;
-
-		for(Direction direction: directions)
+		// Apply region growth
+		//#pragma omp parallel for		<- Don't parallel yet
+		for(MeshBoxGrow& expansion: expandDirections)
 		{
-			double score = computeScore(
-				config, parent,
-				direction, 
-				*worstBox, sourceBoxes, 
-				grid, gridCells);
-			scores[direction] = score;
+			std::cout << "\tExpanding " << toText(expansion.direction) << ": "
+				 	  << expansion.meshBox << " " << expansion.meshBox->dims
+				      << std::endl;
+			//resetMeshBoxChildren(expansion.first);
+			grow(expansion.direction, gridCells, *expansion.meshBox);
 		}
-
-		Direction bestDirection = getBestDirection(scores);
-		if(scores[bestDirection] > 0.0)
-		{
-			std::cout << "\tBest Score: " << toText(bestDirection)
-					  << " = " << scores[bestDirection] << std::endl;
-			//#pragma omp critical
-			grow(bestDirection, gridCells, *worstBox);
-		}
-		else
-			std::cout << "\tNo possible directions detected." << std::endl;
 
 		// Recompute meshes
 		// (Not sure if necessary, but for sanity at this stage)
@@ -742,5 +662,5 @@ void regionGrowth(
 			clipFromMesh(grid, parent, *sourceBox);
 
 		++iterNum;
-	}*/
+	}
 }

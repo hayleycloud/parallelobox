@@ -91,13 +91,16 @@ void ConflictGraph::constructNodesFrom(
 
 void ConflictGraph::enumerateBranches()
 {
-	for(Node& node: m_Nodes)
+	for(int i = 0; i < m_Nodes.size(); ++i)
 	{
-		for(Node& other: m_Nodes)
+		Node& node = m_Nodes[i];
+		for(int j = 0; j < m_Nodes.size(); ++j)
 		{
-			if(std::addressof(other) == std::addressof(node))
+			if(i == j)
 				continue;
- 
+
+			Node& other = m_Nodes[j];
+
 			if(alreadyExists(m_Branches, node, other))
 				continue;
 
@@ -161,11 +164,11 @@ std::optional<Cuboid> ConflictGraph::getOverlapRegion(
 		std::min(cube1Max.y, cube2Max.y) - overlapOrigin.y,
 		std::min(cube1Max.z, cube2Max.z) - overlapOrigin.z);
 
-	bool overlapX = overlapSize.x > 0 && overlapSize.x < cube1.size.x && overlapSize.x < cube2.size.x;
-	bool overlapY = overlapSize.y > 0 && overlapSize.y < cube1.size.y && overlapSize.y < cube2.size.y;
-	bool overlapZ = overlapSize.z > 0 && overlapSize.z < cube1.size.z && overlapSize.z < cube2.size.z;
+	bool overlapX = overlapSize.x > 0;
+	bool overlapY = overlapSize.y > 0;
+	bool overlapZ = overlapSize.z > 0;
 
-	if(overlapX && overlapY && overlapZ)
+	if(overlapSize.x > 0 && overlapSize.y > 0 && overlapSize.z > 0)
 		return Cuboid(overlapOrigin, overlapSize);
 	else
 		return std::nullopt;
@@ -233,18 +236,16 @@ std::ostream& operator<<(std::ostream& strm, const ConflictGraph& graph)
 	for(int i = 0; i < graph.m_Branches.size(); ++i)
 	{
 		const ConflictGraph::Branch& branch = graph.m_Branches.at(i);
-		strm << "Branch " << i << " (" << std::endl;
+		strm << "Branch " << i << " (";
 		strm << "Node " << idMap.at(std::addressof(branch.node1)) << " to ";
 		strm << "Node " << idMap.at(std::addressof(branch.node2)) << "):" << std::endl;
 
-		strm << "\tRegion: " 
-			<< "[ origin: (" 
-			<< branch.region.origin.x << "," 
-			<< branch.region.origin.y << ","
-			<< branch.region.origin.z << "), size: ("
-			<< branch.region.size.x << ","
-			<< branch.region.size.y << ","
-			<< branch.region.size.z << ")]" << std::endl;
+		strm << "\tRegion: "
+			<< branch.region.corners() << ", [size: " << branch.region.size << ']' << std::endl
+			<< "\tNode " << idMap.at(std::addressof(branch.node1)) << ": "
+			<< branch.node1.meshBox.dims.corners() << std::endl
+			<< "\tNode " << idMap.at(std::addressof(branch.node2)) << ": "
+			<< branch.node2.meshBox.dims.corners() << std::endl;
 	}
 
 	return strm;
@@ -371,10 +372,10 @@ bool shrink(GridPathed& gridCells, MeshBox& box, Direction direction)
 	return true;
 }*/
 
-OperationAction getBestOperation(OperationActions& actions)
+/*OperationAction getBestOperation(OperationActions& actions)
 {
 
-}
+}*/
 
 //void applyBestOperations(
 
@@ -389,6 +390,8 @@ void resolveConflicts(
 	mv::vector3<GridCell>& gridCells,
 	Grid& grid)
 {
+	std::cout << "Resolving conflicts..." << std::endl;
+
 	ConflictGraph graph(sourceBoxes, gridCells);
 
 	std::cout << graph << std::endl;

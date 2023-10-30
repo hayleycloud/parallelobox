@@ -8,5 +8,6 @@ struct Cluster
 	std::vector<Mesh::Vertex_index> vertices;
 };
 
-[[nodiscard]] std::vector<Cluster> getClusters(int k, const Mesh& mesh);
+[[nodiscard]] std::vector<Cluster> getClusters(
+	int k, const Mesh& mesh, bool useKMeansPP = true);
 

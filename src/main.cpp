@@ -189,8 +189,8 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 
 	//mergeIterate(config, mesh, grid, gridCells, meshBoxes);
 
-	//for(auto& meshBox: meshBoxes)
-	//	out.push_back(meshBox->mesh);
+	for(auto& meshBox: meshBoxes)
+		out.push_back(meshBox->mesh);
 }
 
 int run(int argc, const char* argv[])
@@ -220,7 +220,8 @@ int run(int argc, const char* argv[])
 
 	std::vector<Mesh> subMeshes;
 	Mesh rightMesh, leftMesh;
-	if(symmetrySplit(inputMesh, &rightMesh, &leftMesh))
+	if(!config.symmetrySkip &&
+	   symmetrySplit(inputMesh, &rightMesh, &leftMesh))
 	{
 		subMeshes.push_back(rightMesh);
 		subMeshes.push_back(leftMesh);

@@ -29,6 +29,8 @@ struct Config
 	double infillRate;
 
 	double proximityFactor;
+
+	bool symmetrySkip;
 };
 
 Config handleArguments(const Arguments& args);

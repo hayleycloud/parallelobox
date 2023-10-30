@@ -221,6 +221,12 @@ void printUsage() {
 		infillRate = *infillRateArg;
 	config.infillRate = infillRate;
 
+	auto symmetrySkipArg = args.getFlag("--skip-symmetry");
+	if(symmetrySkipArg)
+		config.symmetrySkip = true;
+	else
+		config.symmetrySkip = false;
+
 	INIFile printerConfig = loadINIFile(printerConfigFile);
 	config.printer = makePrinterSpec(printerConfig);
 

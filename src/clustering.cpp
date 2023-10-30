@@ -12,6 +12,12 @@ bool indexAlreadyExists(int index, const std::vector<unsigned int>& indices)
 	return std::find(indices.begin(), indices.end(), index) != indices.end();
 }
 
+[[nodiscard]] double l2NormFast(const K::Point_3& p1, const K::Point_3& p2)
+{
+	const K::Vector_3 dp(p1.x() - p2.x(), p1.y() - p2.y(), p1.z() - p2.z());
+	return (dp.x() * dp.x()) + (dp.y() * dp.y()) + (dp.z() * dp.z());
+}
+
 [[nodiscard]] std::vector<Cluster> getInitialCentroids(int k, const Mesh& mesh)
 {
 	std::vector<Cluster> clusters;
@@ -22,13 +28,13 @@ bool indexAlreadyExists(int index, const std::vector<unsigned int>& indices)
 
 	for(int i = 0; i < k; )
 	{
-		int randomIndex = fetchRandom(rng);
+		unsigned int randomIndex = fetchRandom(rng);
 
 		if(indexAlreadyExists(randomIndex, chosenIndices))
 			continue;
 		chosenIndices.push_back(randomIndex);
 
-		clusters.push_back((Cluster) { 
+		clusters.push_back((Cluster) {
 			mesh.point(Mesh::Vertex_index(randomIndex)), {} });
 
 		++i;
@@ -37,10 +43,50 @@ bool indexAlreadyExists(int index, const std::vector<unsigned int>& indices)
 	return clusters;
 }
 
-[[nodiscard]] double l2NormFast(const K::Point_3& p1, const K::Point_3& p2)
+[[nodiscard]] double l2Dist(const Cluster& c1, const Cluster& c2)
 {
+	const K::Point_3 &p1 = c1.centroid, &p2 = c2.centroid;
 	const K::Vector_3 dp(p1.x() - p2.x(), p1.y() - p2.y(), p1.z() - p2.z());
-	return (dp.x() * dp.x()) + (dp.y() * dp.y()) + (dp.z() * dp.z());
+	return std::sqrt((dp.x() + dp.x()) * (dp.y() + dp.y()) * (dp.z() + dp.z()));
+}
+
+[[nodiscard]]
+std::vector<Cluster> getInitialCentroidsKMeansPP(int k, const Mesh& mesh)
+{
+	const std::vector<Cluster> centroids = getInitialCentroids(k, mesh);
+
+	RNGInt<unsigned int> rngInt = makeRNGInt<unsigned int>(0, k);
+
+    std::vector<Cluster> clusters;
+	unsigned int initialCluster = fetchRandom(rngInt);
+    clusters.push_back(centroids[initialCluster]);
+
+    for (int i = 1; i < k; i++) {
+        std::vector<double> distances(k);
+        double sumDistances = 0.0;
+
+        for (int j = 0; j < centroids.size(); j++) {
+            double minDistance = l2Dist(centroids[j], clusters[0]);
+
+            for (int l = 1; l < clusters.size(); l++) {
+                double distance = l2Dist(centroids[j], clusters[l]);
+
+                if (distance < minDistance) {
+                    minDistance = distance;
+                }
+            }
+
+            distances[j] = minDistance;
+            sumDistances += minDistance;
+        }
+
+        // Pick the next centroid proportional to the squared distance
+        std::discrete_distribution<int> distribution(distances.begin(), distances.end());
+        int index = distribution(randEng);
+        clusters.push_back(centroids[index]);
+    }
+
+    return clusters;
 }
 
 void assignVerticesToClusters(const Mesh& mesh, std::vector<Cluster>& clusters)
@@ -116,10 +162,14 @@ bool compareClusterSets(
 	return true;
 }
 
-std::vector<Cluster> getClusters(int k, const Mesh& mesh)
+std::vector<Cluster> getClusters(int k, const Mesh& mesh, bool useKMeansPP)
 {
-	std::vector<Cluster> clusters = getInitialCentroids(k, mesh);
+	std::vector<Cluster> clusters = useKMeansPP
+		? getInitialCentroidsKMeansPP(k, mesh)
+		: getInitialCentroids(k, mesh);
 	assignVerticesToClusters(mesh, clusters);
+
+	printClusters(clusters);
 
 	int itrNum = 1;
 	bool converged = false;
