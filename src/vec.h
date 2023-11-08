@@ -6,11 +6,13 @@ struct Vector3D
 {
 	Vector3D() : x(0), y(0), z(0) {}
 
+	explicit Vector3D(int c) : x(c), y(c), z(c) {}
+
 	Vector3D(int x, int y, int z) : x(x), y(y), z(z) {}
 
 	int x, y, z;
 
-	Vector3D abs() const {
+	[[nodiscard]] Vector3D abs() const {
 		return Vector3D(std::abs(x), std::abs(y), std::abs(z));
 	}
 	
@@ -19,11 +21,11 @@ struct Vector3D
     }
 
 	Vector3D operator+(const Vector3D& other) const {
-        return Vector3D(x + other.x, y + other.y, z + other.z );
+        return { x + other.x, y + other.y, z + other.z };
     }
 
     Vector3D operator-(const Vector3D& other) const {
-        return Vector3D(x - other.x, y - other.y, z - other.z );
+        return { x - other.x, y - other.y, z - other.z };
     }
 
 	friend std::ostream& operator<<(std::ostream& strm, const Vector3D& vec);
@@ -47,16 +49,20 @@ struct Cuboid
 	Vector3D origin;	// Top Left Back (0, 0, 0)
 	Vector3D size;
 
-	Vector3D end() const {
+	[[nodiscard]] Vector3D end() const {
 		return origin + size;
 	}
 
-	Vector3D centroid() const {
+	[[nodiscard]] Vector3D last() const {
+		return end() - Vector3D(1);
+	}
+
+	[[nodiscard]] Vector3D centroid() const {
 		return origin + Vector3D(size.x / 2, size.y / 2, size.z / 2);
 	}
 
-	CuboidCrnr corners() const {
-		return CuboidCrnr(origin, origin + size);
+	[[nodiscard]] CuboidCrnr corners() const {
+		return { origin, last() };
 	}
 
 	friend std::ostream& operator<<(std::ostream& strm, const Cuboid& cuboid);

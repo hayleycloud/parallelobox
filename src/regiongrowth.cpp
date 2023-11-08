@@ -606,8 +606,8 @@ void recomputeAABBs(std::vector<std::unique_ptr<MeshBox>>& boxes)
 {
 	for(auto& box: boxes)
 	{
-		Vector3D min = box->children[0]->position;
-		Vector3D max = box->children[0]->position;
+		Vector3D min = box->children.front()->position;
+		Vector3D max = box->children.front()->position;
 		for(GridCell* child: box->children)
 		{
 			assert(child);
@@ -625,8 +625,11 @@ void recomputeAABBs(std::vector<std::unique_ptr<MeshBox>>& boxes)
 				min.z = child->position.z;
 			if(child->position.z > max.z)
 				max.z = child->position.z;
+
+			std::cout << child->position << " [Min: " << min << ", Max: " << max << "]" << std::endl;
 		}
-		box->dims = Cuboid(min, max - min);
+		box->dims = Cuboid(min, (max - min) + Vector3D(1));
+		std::cout << box->dims << std::endl;
 	}
 }
 

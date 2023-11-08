@@ -7,7 +7,7 @@ void printClusters(const std::vector<Cluster>& clusters)
 		std::cout << '\t' << cluster.centroid << std::endl;
 }
 
-bool indexAlreadyExists(int index, const std::vector<unsigned int>& indices)
+bool indexAlreadyExists(unsigned int index, const std::vector<unsigned int>& indices)
 {
 	return std::find(indices.begin(), indices.end(), index) != indices.end();
 }
@@ -18,7 +18,13 @@ bool indexAlreadyExists(int index, const std::vector<unsigned int>& indices)
 	return (dp.x() * dp.x()) + (dp.y() * dp.y()) + (dp.z() * dp.z());
 }
 
-[[nodiscard]] std::vector<Cluster> getInitialCentroids(int k, const Mesh& mesh)
+[[nodiscard]] double l2Norm(const K::Point_3& p1, const K::Point_3& p2)
+{
+	const K::Vector_3 dp(p1.x() - p2.x(), p1.y() - p2.y(), p1.z() - p2.z());
+	return std::sqrt((dp.x() * dp.x()) + (dp.y() * dp.y()) + (dp.z() * dp.z()));
+}
+
+[[nodiscard]] std::vector<Cluster> getInitialCentroids(unsigned int k, const Mesh& mesh)
 {
 	std::vector<Cluster> clusters;
 	clusters.reserve(k);
@@ -43,48 +49,47 @@ bool indexAlreadyExists(int index, const std::vector<unsigned int>& indices)
 	return clusters;
 }
 
-[[nodiscard]] double l2Dist(const Cluster& c1, const Cluster& c2)
-{
-	const K::Point_3 &p1 = c1.centroid, &p2 = c2.centroid;
-	const K::Vector_3 dp(p1.x() - p2.x(), p1.y() - p2.y(), p1.z() - p2.z());
-	return std::sqrt((dp.x() + dp.x()) * (dp.y() + dp.y()) * (dp.z() + dp.z()));
-}
-
 [[nodiscard]]
-std::vector<Cluster> getInitialCentroidsKMeansPP(int k, const Mesh& mesh)
+std::vector<Cluster> getInitialCentroidsKMeansPP(unsigned int k, const Mesh& mesh)
 {
-	const std::vector<Cluster> centroids = getInitialCentroids(k, mesh);
-
 	RNGInt<unsigned int> rngInt = makeRNGInt<unsigned int>(0, k);
 
-    std::vector<Cluster> clusters;
-	unsigned int initialCluster = fetchRandom(rngInt);
-    clusters.push_back(centroids[initialCluster]);
+    std::vector<K::Point_3> centroids;
+	centroids.reserve(k);
 
-    for (int i = 1; i < k; i++) {
-        std::vector<double> distances(k);
-        double sumDistances = 0.0;
+	unsigned int initialVertex = fetchRandom(rngInt);
+    centroids.push_back(mesh.point(Mesh::Vertex_index(initialVertex)));
 
-        for (int j = 0; j < centroids.size(); j++) {
-            double minDistance = l2Dist(centroids[j], clusters[0]);
+    while(centroids.size() < k)
+    {
+        std::vector<double> distances;
+		distances.reserve(mesh.number_of_vertices());
 
-            for (int l = 1; l < clusters.size(); l++) {
-                double distance = l2Dist(centroids[j], clusters[l]);
+	    for(Mesh::Vertex_index vIndex: mesh.vertices())
+	    {
+		    const K::Point_3& p = mesh.point(vIndex);
+			double minDistance = std::numeric_limits<double>::max();
 
-                if (distance < minDistance) {
-                    minDistance = distance;
-                }
-            }
+			for(const K::Point_3& centroid: centroids)
+			{
+				double d = l2Norm(p, centroid);
+				minDistance = std::min(minDistance, d);
+			}
 
-            distances[j] = minDistance;
-            sumDistances += minDistance;
-        }
+			distances.push_back(minDistance);
+		}
 
         // Pick the next centroid proportional to the squared distance
-        std::discrete_distribution<int> distribution(distances.begin(), distances.end());
-        int index = distribution(randEng);
-        clusters.push_back(centroids[index]);
+        std::discrete_distribution<unsigned int>
+            distribution(distances.begin(), distances.end());
+        unsigned int index = distribution(randEng);
+        centroids.push_back(mesh.point(Mesh::Vertex_index(index)));
     }
+
+	std::vector<Cluster> clusters;
+	clusters.reserve(k);
+	for(const K::Point_3& centroid: centroids)
+		clusters.push_back((Cluster) { centroid, {} });
 
     return clusters;
 }
@@ -169,6 +174,9 @@ std::vector<Cluster> getClusters(int k, const Mesh& mesh, bool useKMeansPP)
 		: getInitialCentroids(k, mesh);
 	assignVerticesToClusters(mesh, clusters);
 
+	std::cout << "Initial cluster centroids ";
+	std::cout << '(' << (useKMeansPP ? "k-means++" : "random") << "):";
+	std::cout << std::endl;
 	printClusters(clusters);
 
 	int itrNum = 1;

@@ -12,7 +12,7 @@ struct GridCell
 	Vector3D position;
 
 	Mesh mesh;
-	std::vector<MeshBox*> parents;
+	std::list<MeshBox*> parents;
 
 	enum class ContentType {
 		Internal,
@@ -25,7 +25,7 @@ struct MeshBox
 {
 	Mesh mesh;
 	Cuboid dims;
-	std::vector<GridCell*> children;
+	std::list<GridCell*> children;
 
 	MeshBox(const Cuboid& dims) : dims(dims) {}
 
@@ -37,7 +37,7 @@ struct MeshBox
 		const Mesh& mesh,
 		const Cuboid& dims,
 		const std::vector<GridCell*>& children)
-		: mesh(mesh), dims(dims), children(children) {}
+		: mesh(mesh), dims(dims), children(children.begin(), children.end()) {}
 };
 
 void getSurfaceBoxes(
