@@ -166,12 +166,14 @@ void printUsage() {
 [[nodiscard]] double granularityScaleFrom(const std::string& granularityStr)
 {
 	const std::unordered_map<std::string,double> types{
-		{ "xcoarse", scaleFromCubeRoot(2.0) },
-		{ "vcoarse", scaleFromCubeRoot(3.0) },
-		{ "coarse",  scaleFromCubeRoot(4.0) },
-		{ "regular", scaleFromCubeRoot(5.0) },
-		{ "fine",    scaleFromCubeRoot(6.0) },
-		{ "vfine",   scaleFromCubeRoot(7.0) }
+		{ "ucoarse", scaleFromCubeRoot(2.0) },
+		{ "xcoarse", scaleFromCubeRoot(3.0) },
+
+		{ "vcoarse",  scaleFromCubeRoot(8.0) },
+		{ "coarse", scaleFromCubeRoot(9.0) },
+		{ "regular", scaleFromCubeRoot(10.0) },
+		{ "fine",    scaleFromCubeRoot(12.0) },
+		{ "vfine",   scaleFromCubeRoot(15.0) }
 	};
 
 	if(types.count(granularityStr) == 0)

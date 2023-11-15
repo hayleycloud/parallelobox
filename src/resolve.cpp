@@ -2,6 +2,30 @@
 #include "multivec.h"
 #include <iostream>
 
+std::vector<GridCell*> sampleCells(
+	mv::vector3<GridCell>& gridCells, const Cuboid& cuboid)
+{
+	const Vector3D end = cuboid.end();
+	std::vector<GridCell*> cells;
+
+	//std::cout << "Sampling " << cuboid.origin << " to " << end << " (excl) "
+	//		  << cuboid.size << std::endl;
+	for(int x = cuboid.origin.x; x < end.x; ++x)
+	{
+		for(int y = cuboid.origin.y; y < end.y; ++y)
+		{
+			for(int z = cuboid.origin.z; z < end.z; ++z)
+			{
+				GridCell* cell = std::addressof(mv::get(gridCells, x, y, z));
+				assert(cell);
+				cells.push_back(cell);
+			}
+		}
+	}
+
+	return cells;
+}
+
 struct ShrinkOp
 {
 	Direction direction;		// Side to shrink
@@ -15,7 +39,7 @@ struct OperationAction
 {
 	MeshBox& target;
 	ShrinkOp action;
-	Cuboid region;
+	Cuboid& region;
 };
 
 typedef std::vector<OperationAction> OperationActions;
@@ -42,8 +66,12 @@ public:
 		std::vector<std::unique_ptr<MeshBox>>& sourceBoxes, 
 		mv::vector3<GridCell>& gridCells);
 
+	[[nodiscard]] std::vector<Branch*> getBranches(const Node& node);
+
 	[[nodiscard]] std::list<OperationActions> getResolutionOperations(
 		mv::vector3<GridCell>& gridCells);
+
+	[[nodiscard]] bool conflictsRemaining() const { return !m_Branches.empty(); }
 
 	friend std::ostream& operator<<(std::ostream& strm, const ConflictGraph& graph);
 
@@ -53,13 +81,17 @@ private:
 
 	void constructNodesFrom(std::vector<std::unique_ptr<MeshBox>>& boxes);
 
-	void enumerateBranches();
+	void enumerateBranches(mv::vector3<GridCell>& gridCells);
 
 	[[nodiscard]] bool alreadyExists(
 		const std::vector<Branch>& branches,
 		const Node& node1, 
 		const Node& node2) 
 		const;
+
+	[[nodiscard]] bool isRegionEmpty(
+		mv::vector3<GridCell>& gridCells,
+		const Cuboid& region) const;
 
 	[[nodiscard]] std::optional<Cuboid> getOverlapRegion(
 		const Node& node1, const Node& node2) const;
@@ -83,7 +115,7 @@ ConflictGraph::ConflictGraph(
 	mv::vector3<GridCell>& gridCells)
 {
 	constructNodesFrom(sourceBoxes);
-	enumerateBranches();
+	enumerateBranches(gridCells);
 }
 
 void ConflictGraph::constructNodesFrom(
@@ -95,7 +127,7 @@ void ConflictGraph::constructNodesFrom(
 	}
 }
 
-void ConflictGraph::enumerateBranches()
+void ConflictGraph::enumerateBranches(mv::vector3<GridCell>& gridCells)
 {
 	for(int i = 0; i < m_Nodes.size(); ++i)
 	{
@@ -113,12 +145,34 @@ void ConflictGraph::enumerateBranches()
 			std::optional<Cuboid> overlapRegion = getOverlapRegion(node, other);
 			if(overlapRegion)
 			{
-				m_Branches.push_back((Branch) {
-					node, other, *overlapRegion }
-				);
+				// Empty regions aren't really conflicts!
+				if(!isRegionEmpty(gridCells, *overlapRegion))
+				{
+					m_Branches.push_back((Branch) {
+						node, other, *overlapRegion
+					});
+				}
 			}
 		}
 	}
+}
+
+
+std::vector<ConflictGraph::Branch*> ConflictGraph::getBranches(const Node& node)
+{
+	const Node* nodePtr = std::addressof(node);
+	std::vector<Branch*> branches;
+
+	for(Branch& branch: m_Branches)
+	{
+		if(std::addressof(branch.node1) == nodePtr
+			|| std::addressof(branch.node2) == nodePtr)
+		{
+			branches.push_back(std::addressof(branch));
+		}
+	}
+
+	return branches;
 }
 
 bool ConflictGraph::alreadyExists(
@@ -142,6 +196,18 @@ bool ConflictGraph::alreadyExists(
 	}
 
 	return false;
+}
+
+bool ConflictGraph::isRegionEmpty(
+	mv::vector3<GridCell>& gridCells,
+	const Cuboid& region) const
+{
+	for(GridCell* cell: sampleCells(gridCells, region))
+		if(cell->type == GridCell::ContentType::Boundary/* ||
+		   cell->type == GridCell::ContentType::Internal*/)
+			return false;
+
+	return true;
 }
 
 std::optional<Cuboid> ConflictGraph::getOverlapRegion(
@@ -170,10 +236,6 @@ std::optional<Cuboid> ConflictGraph::getOverlapRegion(
 		std::min(cube1Max.y, cube2Max.y) - overlapOrigin.y,
 		std::min(cube1Max.z, cube2Max.z) - overlapOrigin.z);
 
-	bool overlapX = overlapSize.x > 0;
-	bool overlapY = overlapSize.y > 0;
-	bool overlapZ = overlapSize.z > 0;
-
 	if(overlapSize.x > 0 && overlapSize.y > 0 && overlapSize.z > 0)
 		return Cuboid(overlapOrigin, overlapSize);
 	else
@@ -198,15 +260,13 @@ OperationActions ConflictGraph::getResolutionsFor(Branch& branch)
 	std::vector<ShrinkOp> node1Ops = getResolutionsFor(branch.node1, branch.region);
 	for(const ShrinkOp& op: node1Ops)
 		operations.emplace_back((OperationAction) {
-			branch.node1.meshBox, op, getResolutionRegion(
-					branch.node1.meshBox, op)
+			branch.node1.meshBox, op, branch.region
 		});
 
 	std::vector<ShrinkOp> node2Ops = getResolutionsFor(branch.node2, branch.region);
 	for(const ShrinkOp& op: node2Ops)
 		operations.emplace_back((OperationAction) {
-			branch.node2.meshBox, op, getResolutionRegion(
-				branch.node2.meshBox, op)
+			branch.node2.meshBox, op, branch.region
 		});
 
 	return operations;
@@ -234,8 +294,47 @@ ConflictGraph::getResolutionsFor(const Node& node, Cuboid region) const
 	return resolutions;
 }
 
-[[nodiscard]] Cuboid ConflictGraph::getResolutionRegion(
-	const MeshBox& meshbox, const ShrinkOp& op) const
+[[nodiscard]] Cuboid getResolutionRegion(
+	const MeshBox& meshbox, const ShrinkOp& op)
+{
+	Cuboid region = meshbox.dims;
+
+	switch(op.direction)
+	{
+		case Direction::Right:
+		{
+			region.origin.x += static_cast<int>(op.quantity);
+		}
+		case Direction::Left:
+		{
+			region.size.x -= static_cast<int>(op.quantity);
+		}
+		break;
+		case Direction::Up:
+		{
+			region.origin.y += static_cast<int>(op.quantity);
+		}
+		case Direction::Down:
+		{
+			region.size.y -= static_cast<int>(op.quantity);
+		}
+		break;
+		case Direction::Out:
+		{
+			region.origin.z += static_cast<int>(op.quantity);
+		}
+		case Direction::In:
+		{
+			region.size.z -= static_cast<int>(op.quantity);
+		}
+		break;
+	}
+
+	return region;
+}
+
+/*[[nodiscard]] Cuboid getResolutionRegion(
+	const MeshBox& meshbox, const ShrinkOp& op)
 {
 	const Cuboid& dims = meshbox.dims;
 	auto quantity = static_cast<int>(op.quantity);
@@ -281,7 +380,8 @@ ConflictGraph::getResolutionsFor(const Node& node, Cuboid region) const
 	}
 
 	return {{}, {}};    // Should never get here!
-}
+}*/
+
 
 std::ostream& operator<<(std::ostream& strm, const ConflictGraph& graph)
 {
@@ -328,30 +428,6 @@ void printOperations(
 			std::cout << action.action.quantity << std::endl;
 		}
 	}
-}
-
-std::vector<GridCell*> sampleCells(
-	mv::vector3<GridCell>& gridCells, const Cuboid& cuboid)
-{
-	const Vector3D end = cuboid.end();
-	std::vector<GridCell*> cells;
-
-	//std::cout << "Sampling " << cuboid.origin << " to " << end << " (excl) "
-	//		  << cuboid.size << std::endl;
-	for(int x = cuboid.origin.x; x < end.x; ++x)
-	{
-		for(int y = cuboid.origin.y; y < end.y; ++y)
-		{
-			for(int z = cuboid.origin.z; z < end.z; ++z)
-			{
-				GridCell* cell = std::addressof(mv::get(gridCells, x, y, z));
-				assert(cell);
-				cells.push_back(cell);
-			}
-		}
-	}
-
-	return cells;
 }
 
 void recomputeAABB(MeshBox& box)
@@ -417,35 +493,29 @@ void applyShrinkOp(mv::vector3<GridCell>& gridCells, const ShrinkOp& op, MeshBox
 	// Recompute AABB from shrink op direction (this shrinks the directed side)
 	switch(op.direction)
 	{
-		case Direction::Left:
+		case Direction::Right:
 		{
 			box.dims.origin.x += static_cast<int>(op.quantity);
-			box.dims.size.x -= static_cast<int>(op.quantity);
 		}
-		break;
-		case Direction::Right:
+		case Direction::Left:
 		{
 			box.dims.size.x -= static_cast<int>(op.quantity);
 		}
 		break;
 		case Direction::Up:
 		{
-			box.dims.size.y -= static_cast<int>(op.quantity);
+			box.dims.origin.y += static_cast<int>(op.quantity);
 		}
-		break;
 		case Direction::Down:
 		{
-			box.dims.origin.y += static_cast<int>(op.quantity);
 			box.dims.size.y -= static_cast<int>(op.quantity);
-		}
-		break;
-		case Direction::In:
-		{
-			box.dims.origin.z += static_cast<int>(op.quantity);
-			box.dims.size.z -= static_cast<int>(op.quantity);
 		}
 		break;
 		case Direction::Out:
+		{
+			box.dims.origin.z += static_cast<int>(op.quantity);
+		}
+		case Direction::In:
 		{
 			box.dims.size.z -= static_cast<int>(op.quantity);
 		}
@@ -483,17 +553,115 @@ void execute(
 	}
 
 	Cuboid oldDims = action.target.dims;
-	std::cout << "Shrinking " << toText(action.action.direction)
-	          << " of Mesh Box " << index
+	std::cout << "Shrinking Mesh Box " << index
+			  << " " << toText(action.action.direction)
 	          << " by " << action.action.quantity << std::endl;
 
 	applyShrinkOp(gridCells, action.action, action.target);
+
+	std::cout << "\t" << oldDims << " => " << action.target.dims << std::endl;
 }
 
-/*OperationAction getBestOperation(OperationActions& actions)
+[[nodiscard]] bool isPerfectSolution(
+	const Cuboid& region,
+	const OperationAction& operation)
 {
+	switch(operation.action.direction)
+	{
+		case Direction::Left:
+		case Direction::Right:
+		{
+			if(region.size.y == operation.target.dims.size.y
+			   && region.size.z == operation.target.dims.size.z)
+				return true;
+		}
+			break;
+		case Direction::Up:
+		case Direction::Down:
+		{
+			if(region.size.x == operation.target.dims.size.x
+			   && region.size.z == operation.target.dims.size.z)
+				return true;
+		}
+			break;
+		case Direction::In:
+		case Direction::Out:
+		{
+			if(region.size.x == operation.target.dims.size.x
+			   && region.size.y == operation.target.dims.size.y)
+				return true;
+		}
+			break;
+	}
 
-}*/
+	return false;
+}
+
+[[nodiscard]] size_t solutionVoidCost(
+	mv::vector3<GridCell>& gridCells, const OperationAction& solution)
+{
+	Cuboid region = getResolutionRegion(solution.target, solution.action);
+
+	std::vector<GridCell*> samples = sampleCells(gridCells, region);
+
+	size_t voidCount = 0;
+	for(GridCell* sample: samples)
+	{
+		if((sample->parents.size() == 1)
+			&& (sample->parents.front() == std::addressof(solution.target)))
+				++voidCount;
+	}
+
+	return voidCount;
+}
+
+OperationAction& getBestOperation(
+	mv::vector3<GridCell>& gridCells, OperationActions& actions)
+{
+	size_t bestVoidCost = std::numeric_limits<size_t>::max();
+	OperationAction* bestOp = nullptr;
+
+	for(OperationAction& action: actions)
+	{
+		if(isPerfectSolution(action.region, action))
+			return action;
+
+		size_t voidCost = solutionVoidCost(gridCells, action);
+		if(voidCost < bestVoidCost)
+		{
+			bestOp = std::addressof(action);
+			bestVoidCost = voidCost;
+		}
+	}
+
+	return *bestOp;
+}
+
+OperationAction& getBestOperation(
+	mv::vector3<GridCell>& gridCells,
+	std::list<OperationActions>& branchActions)
+{
+	size_t bestVoidCost = std::numeric_limits<size_t>::max();
+	OperationAction* bestOp = nullptr;
+
+	for(OperationActions& actions: branchActions)
+	{
+		for(OperationAction& action: actions)
+		{
+			if(isPerfectSolution(action.region, action))
+				return action;
+
+			size_t voidCost = solutionVoidCost(gridCells, action);
+			if(voidCost < bestVoidCost)
+			{
+				bestOp = std::addressof(action);
+				bestVoidCost = voidCost;
+			}
+		}
+	}
+
+	return *bestOp;
+}
 
 //void applyBestOperations(
 
@@ -520,32 +688,41 @@ void resolveConflicts(
 
 	ConflictGraph graph(sourceBoxes, gridCells);
 
-	std::cout << graph << std::endl;
-
-	std::list<OperationActions> operations = graph.getResolutionOperations(
-		gridCells);
-	//printOperations(operations, sourceBoxes);
-	//operations.sort(bestOperationSort);
-
-	std::set<MeshBox*> meshBoxesDone;
-	for(OperationActions& actions: operations)
+	unsigned int resolveItr = 1;
+	while(graph.conflictsRemaining())
 	{
-		if(!actions.empty())
+		std::cout << "Resolution Iteration " << resolveItr << std::endl;
+		std::cout << graph << std::endl;
+
+		std::list<OperationActions> operations = graph.getResolutionOperations(
+			gridCells);
+		//printOperations(operations, sourceBoxes);
+		//operations.sort(bestOperationSort);
+
+		OperationAction& bestAction = getBestOperation(gridCells, operations);
+		execute(gridCells, bestAction, sourceBoxes);
+
+		/*std::set<MeshBox *> meshBoxesDone;
+		for (OperationActions &actions: operations)
 		{
-			if(meshBoxesDone.contains(std::addressof(actions[0].target)))
-				continue;
+			if (!actions.empty())
+			{
+				//if (meshBoxesDone.contains(std::addressof(actions[0].target)))
+				//	continue;
 
-			execute(gridCells, actions[0], sourceBoxes);
+				execute(gridCells, actions[0], sourceBoxes);
 
-			meshBoxesDone.insert(std::addressof(actions[0].target));
-		}
+				//meshBoxesDone.insert(std::addressof(actions[0].target));
+
+				break;
+			}
+		}*/
+
+		++resolveItr;
+		graph = ConflictGraph(sourceBoxes, gridCells);
 	}
 
 	std::cout << "After resolution... " << std::endl;
-
-	ConflictGraph graph2(sourceBoxes, gridCells);
-	std::cout << graph2 << std::endl;
-	//printOperations(graph2.getResolutionOperations(gridCells), sourceBoxes);
 
 	empties = 0;
 	empties = mv::reduce<GridCell,size_t>([](size_t& acc, GridCell& cell) {
@@ -554,5 +731,8 @@ void resolveConflicts(
 	}, gridCells, empties);
 
 	std::cout << "Orphaned Cells: " << empties << std::endl;
+
+	for(auto& meshbox: sourceBoxes)
+		clipFromMesh(grid, parent, *meshbox);
 }
 

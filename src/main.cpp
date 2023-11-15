@@ -37,6 +37,27 @@ std::string toText(Direction direction)
 	return "";
 }
 
+std::string toTextSide(Direction direction)
+{
+	switch(direction)
+	{
+		case Direction::Left:
+			return "Left";
+		case Direction::Right:
+			return "Right";
+		case Direction::Up:
+			return "Top";
+		case Direction::Down:
+			return "Bottom";
+		case Direction::In:
+			return "Front";
+		case Direction::Out:
+			return "Back";
+	}
+
+	return "";
+}
+
 std::vector<std::unique_ptr<MeshBox>> getSourceMeshBoxesFrom(
 	const std::vector<Cluster>& clusters, 
 	const Grid& grid,
@@ -55,7 +76,9 @@ std::vector<std::unique_ptr<MeshBox>> getSourceMeshBoxesFrom(
 		GridCell& targetCell = mv::get(gridCells, offsetX, offsetY, offsetZ);
 		sourceMeshBoxes.emplace_back(std::make_unique<MeshBox>((MeshBox){
 			targetCell.mesh, 
-			Cuboid(targetCell.position, Vector3D(1, 1, 1)),
+			Cuboid(
+				Vector3D(offsetX, offsetY, offsetZ),
+				Vector3D(1, 1, 1)),
 			{ std::addressof(targetCell) }
 		}));
 		targetCell.parents.push_back(sourceMeshBoxes.back().get());

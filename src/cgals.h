@@ -29,3 +29,4 @@ enum class Direction {
 
 std::string toText(Direction direction);
 
+std::string toTextSide(Direction direction);

@@ -1,14 +1,13 @@
 #include "meshbox.h"
+#include <CGAL/Side_of_triangle_mesh.h>
 
 //GridCell::GridCell()
 //{
 //}
 
-GridCell::ContentType determineContentType(
-	const Mesh& mesh, 
+inline GridCell::ContentType determineContentType(
 	const Mesh& surfMesh, 
-	const Mesh& volMesh,
-	int x, int y, int z)
+	const Mesh& volMesh)
 {
 	if(surfMesh.number_of_vertices() > 0)
 		return GridCell::ContentType::Boundary;
@@ -28,6 +27,8 @@ void getSurfaceBoxes(
 	int numPrinters)
 	//std::vector<std::unique_ptr<MeshBox>>& meshBoxes)
 {
+	CGAL::Side_of_triangle_mesh<Mesh, K> inside(mesh);
+
 	gridCells.resize(grid.getNumBoxesZ());
 	
 	#pragma omp parallel for
@@ -44,20 +45,29 @@ void getSurfaceBoxes(
 				Mesh surfMesh(mesh);
 				grid.clipSurface(surfMesh, x, y, z);
 
-				Mesh volMesh(mesh);
-				grid.clipVolume(volMesh, x, y, z);
+				if(surfMesh.number_of_vertices() > 0)
+				{
+					Mesh volMesh(mesh);
+					grid.clipVolume(volMesh, x, y, z);
 
-				auto contentType = determineContentType(
-					mesh, surfMesh, volMesh, x, y, z);
+					gridCells[z][y][x] = (GridCell) { 
+						Vector3D(x, y, z), volMesh, {}, 
+						GridCell::ContentType::Boundary
+					};
+				}
+				else
+				{
+					CGAL::Bounded_side res = inside(dims.min());
+					GridCell::ContentType contentType = 
+						res == CGAL::ON_BOUNDED_SIDE ? 
+						GridCell::ContentType::Internal : 
+						GridCell::ContentType::Empty;
 
-				gridCells[z][y][x] = (GridCell) { 
-					Vector3D(x, y, z),
-					contentType == GridCell::ContentType::Boundary ?
-						volMesh : surfMesh, 
-					{}, 
-					//std::array<MeshBox*,NUM_SIDES>(),
-					contentType 
-				};
+					gridCells[z][y][x] = (GridCell) { 
+						Vector3D(x, y, z), {}, {}, contentType
+					};
+				}
+
 
 				/*if(contentType == GridCell::ContentType::Boundary)
 				{
