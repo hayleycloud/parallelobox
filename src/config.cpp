@@ -223,6 +223,8 @@ void printUsage() {
 		infillRate = *infillRateArg;
 	config.infillRate = infillRate;
 
+	config.seed = args.getInt("--seed");
+
 	auto symmetrySkipArg = args.getFlag("--skip-symmetry");
 	if(symmetrySkipArg)
 		config.symmetrySkip = true;

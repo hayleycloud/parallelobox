@@ -25,13 +25,12 @@ void getSurfaceBoxes(
 	const Grid& grid, 
 	mv::vector3<GridCell>& gridCells,
 	int numPrinters)
-	//std::vector<std::unique_ptr<MeshBox>>& meshBoxes)
 {
 	CGAL::Side_of_triangle_mesh<Mesh, K> inside(mesh);
 
 	gridCells.resize(grid.getNumBoxesZ());
 	
-	#pragma omp parallel for
+	#pragma omp parallel for default(none) shared(mesh, grid, gridCells, inside)
 	for(int z = 0; z < grid.getNumBoxesZ(); ++z)
 	{
 		gridCells[z].resize(grid.getNumBoxesY());
@@ -113,7 +112,7 @@ Cuboid getDimsFrom(std::vector<GridCell*>& children)
 
 	Vector3D size(max.x - min.x, max.y - min.y, max.z - min.z);
 
-	return Cuboid(min, size);
+	return { min, size };
 }
 
 /*void getChildrenFromSide(
@@ -144,9 +143,9 @@ void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child)
 		origin.y() + (mbDims.origin.y * grid.getElementSize()),
 		origin.z() + (mbDims.origin.z * grid.getElementSize()));
 	const K::Vector_3 meshSize(
-		(mbDims.size.x + 1) * grid.getElementSize(),
-		(mbDims.size.y + 1) * grid.getElementSize(),
-		(mbDims.size.z + 1) * grid.getElementSize());
+		mbDims.size.x * grid.getElementSize(),
+		mbDims.size.y * grid.getElementSize(),
+		mbDims.size.z * grid.getElementSize());
 	const K::Point_3 meshEnd = meshOrigin + meshSize;
 
 	const CGAL::Iso_cuboid_3<K> bbox(meshOrigin, meshEnd);

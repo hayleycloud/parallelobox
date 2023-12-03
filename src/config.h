@@ -30,6 +30,8 @@ struct Config
 
 	double proximityFactor;
 
+	std::optional<unsigned int> seed;
+
 	bool symmetrySkip;
 };
 

@@ -101,9 +101,6 @@ private:
 	[[nodiscard]] std::vector<ShrinkOp> getResolutionsFor(
 		const Node& node, Cuboid region) const;
 
-	[[nodiscard]] Cuboid getResolutionRegion(
-		const MeshBox& meshbox, const ShrinkOp& op) const;
-
 	// TODO: Assign nodes and subnodes from mesh boxes
 	// TODO: Enumerate overlaps from mesh box cuboid data
 	//
@@ -668,6 +665,17 @@ OperationAction& getBestOperation(
 bool bestOperationSort(const OperationActions& a, const OperationActions& b)
 {
 	return true;
+}
+
+bool enumerateConflicts(
+	std::vector<std::unique_ptr<MeshBox>>& sourceBoxes,
+	mv::vector3<GridCell>& gridCells)
+{
+	ConflictGraph graph(sourceBoxes, gridCells);
+
+	std::cout << graph << std::endl;
+
+	return !graph.conflictsRemaining();
 }
 
 void resolveConflicts(

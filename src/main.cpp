@@ -9,6 +9,7 @@
 #include "regiongrowth.h"
 #include "resolve.h"
 #include "multivec.h"
+#include "random.h"
 
 #include <sstream>
 #include <fstream>
@@ -58,6 +59,51 @@ std::string toTextSide(Direction direction)
 	return "";
 }
 
+GridCell* getNearestBoundaryTo(
+	const Grid& grid,
+	mv::vector3<GridCell>& gridCells,
+	const Cluster& cluster)
+{
+	K::Vector_3 d = cluster.centroid - grid.getOrigin();
+
+	int offsetX = std::floor(d.x() / grid.getElementSize());
+	int offsetY = std::floor(d.y() / grid.getElementSize());
+	int offsetZ = std::floor(d.z() / grid.getElementSize());
+
+	GridCell& targetCell = mv::get(gridCells, offsetX, offsetY, offsetZ);
+
+	if(targetCell.type == GridCell::ContentType::Boundary)
+		return std::addressof(targetCell);
+
+	constexpr int MAX_SEARCH_RADIUS = 2;
+	for(int radius = 1; radius < MAX_SEARCH_RADIUS; ++radius)
+	{
+		int xStart = std::max(offsetX - radius, 0);
+		int xEnd = std::min(offsetX + radius, (int)grid.getNumBoxesX());
+		for(int x = xStart; x < xEnd; ++x)
+		{
+			int yStart = std::max(offsetY - radius, 0);
+			int yEnd = std::min(offsetY + radius, (int)grid.getNumBoxesY());
+			for(int y = yStart; y < yEnd; ++y)
+			{
+				int zStart = std::max(offsetZ - radius, 0);
+				int zEnd = std::min(offsetZ + radius, (int)grid.getNumBoxesZ());
+				for(int z = zStart; z < zEnd; ++z)
+				{
+					GridCell& alterCell = mv::get(gridCells, x, y, z);
+
+					if(alterCell.type == GridCell::ContentType::Boundary)
+					{
+						return std::addressof(alterCell);
+					}
+				}
+			}
+		}
+	}
+
+	return nullptr;
+}
+
 std::vector<std::unique_ptr<MeshBox>> getSourceMeshBoxesFrom(
 	const std::vector<Cluster>& clusters, 
 	const Grid& grid,
@@ -67,21 +113,16 @@ std::vector<std::unique_ptr<MeshBox>> getSourceMeshBoxesFrom(
 
 	for(const Cluster& cluster: clusters)
 	{
-		K::Vector_3 d = cluster.centroid - grid.getOrigin();
-
-		int offsetX = std::floor(d.x() / grid.getElementSize());
-		int offsetY = std::floor(d.y() / grid.getElementSize());
-		int offsetZ = std::floor(d.z() / grid.getElementSize());
-
-		GridCell& targetCell = mv::get(gridCells, offsetX, offsetY, offsetZ);
-		sourceMeshBoxes.emplace_back(std::make_unique<MeshBox>((MeshBox){
-			targetCell.mesh, 
-			Cuboid(
-				Vector3D(offsetX, offsetY, offsetZ),
-				Vector3D(1, 1, 1)),
-			{ std::addressof(targetCell) }
-		}));
-		targetCell.parents.push_back(sourceMeshBoxes.back().get());
+		GridCell *result = getNearestBoundaryTo(grid, gridCells, cluster);
+		if(result)
+		{
+			sourceMeshBoxes.emplace_back(std::make_unique<MeshBox>((MeshBox) {
+				result->mesh,
+				Cuboid(result->position, Vector3D(1, 1, 1)),
+				{result}
+			}));
+			result->parents.push_back(sourceMeshBoxes.back().get());
+		}
 	}
 
 	return sourceMeshBoxes;
@@ -105,6 +146,33 @@ void verifyClusters(
 				      << "outside of mesh! (min: " << min << ", max: " << max << ")";
 		}
 	}
+}
+
+void saveMeshes(const std::string& directory, const std::vector<const Mesh*>& meshes)
+{
+	unsigned int meshIndex = 0;
+	for(const Mesh* mesh: meshes)
+	{
+		assert(mesh);
+
+		std::stringstream ss("");
+		ss << meshIndex << ".stl";
+
+		if(CGAL::IO::write_STL(directory + "/" + ss.str(), *mesh))
+			std::cout << "Saved " << ss.str() << std::endl;
+		else
+			std::cerr << "Failed to write " << ss.str() << "!" << std::endl;
+
+		++meshIndex;
+	}
+}
+
+void saveMeshes(const std::string& directory, const std::vector<Mesh>& meshes)
+{
+	std::vector<const Mesh*> meshPtrs;
+	for(const Mesh& mesh: meshes)
+		meshPtrs.push_back(std::addressof(mesh));
+	saveMeshes(directory, meshPtrs);
 }
 
 void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
@@ -136,81 +204,61 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 	mv::vector3<GridCell> gridCells;
     getSurfaceBoxes(mesh, grid, gridCells, config.numPrinters);
 
-	/*mv::forEach<MeshBox>([](MeshBox& box) {
-		std::string type = "";
-		switch(box.type)
+	/*unsigned int mIndex = 0;
+	mv::forEach<GridCell>([&](GridCell& cell) {
+		if(cell.type == GridCell::ContentType::Boundary)
 		{
-			case MeshBox::ContentType::Internal:
-				type += "Internal";
-				break;
-			case MeshBox::ContentType::Boundary:
-				type += "Boundary";
-				break;
-			case MeshBox::ContentType::Empty:
-				type += "Empty";
-				break;
+			std::stringstream ss("");
+			ss << mIndex << ".stl";
+
+			CGAL::IO::write_STL("out/" + ss.str(), cell.mesh);
+
+			++mIndex;
 		}
+	}, gridCells);*/
 
-		std::cout << type << ": " << box.dims << std::endl;
-	}, meshBoxes);*/
-
-	/*MeshBoxList boundaryMeshBoxes = mv::reduce<MeshBox,MeshBoxList>(
-		[](MeshBoxList& out, MeshBox& in) {
-			if(in.type == MeshBox::ContentType::Boundary)
-				out.push_back(std::addressof(in));
-	}, meshBoxes);*/
-
-	/*const std::array<K::Vector_3,6> cardinalVecs = {
-		K::Vector_3( 0,  1,  0),
-		K::Vector_3( 0, -1,  0),
-		K::Vector_3(-1,  0,  0),
-		K::Vector_3( 1,  0,  0),
-		K::Vector_3( 0,  0,  1),
-		K::Vector_3( 0,  0, -1)
-	};
-	
-	for(auto item = meshBoxes.begin(); item != meshBoxes.end(); ++item)
-	{
-		MeshBox& meshBox = **item;
-		Mesh& mesh = meshBox.mesh;
-
-		auto fnormals2 = mesh.add_property_map<face_descriptor, K::Vector_3>(
-			"f:normals", CGAL::NULL_VECTOR).first;
-		PMP::compute_face_normals(mesh, fnormals2);
-
-		double bestOverhangArea = std::numeric_limits<double>::max();
-		K::Vector_3 bestOverhang;
-		for(const K::Vector_3& vec: cardinalVecs)
-		{
-			double ohArea = overhangArea(config, mesh, fnormals2, vec);
-			if(ohArea < bestOverhangArea)
-			{
-				bestOverhangArea = ohArea;
-				bestOverhang = vec;
-			}
-		}
-
-		//std::cout << bestOverhangArea << " of overhang." << std::endl;
-	}*/
+	//CGAL::IO::write_STL("out/mesh.stl", mesh);
 
 	std::vector<Cluster> clusters = getClusters(config.numPrinters, mesh);
 	verifyClusters(clusters, min, max);
 	std::vector<std::unique_ptr<MeshBox>> meshBoxes = 
 		getSourceMeshBoxesFrom(clusters, grid, gridCells);
 
+	enumerateConflicts(meshBoxes, gridCells);
+
 	regionGrowth(config, mesh, meshBoxes, gridCells, grid);
 
-	resolveConflicts(mesh, meshBoxes, gridCells, grid);
+	//resolveConflicts(mesh, meshBoxes, gridCells, grid);
 
-	/*mv::vector3<MeshBox*> meshBoxRefs = mv::map<MeshBox,MeshBox*>(
-		[](MeshBox& meshBox) -> MeshBox* {
-			if(meshBox.type == MeshBox::ContentType::Empty)
-				return nullptr;
-			else
-				return &meshBox;
-	}, meshBoxes);*/
+	enumerateConflicts(meshBoxes, gridCells);
 
-	//mergeIterate(config, mesh, grid, gridCells, meshBoxes);
+	size_t conflicts = 0;
+	conflicts = mv::reduce<GridCell,size_t>([](size_t& acc, GridCell& cell) {
+		if(cell.type == GridCell::ContentType::Boundary && cell.parents.size() > 1)
+			++acc;
+	}, gridCells, conflicts);
+
+	std::cout << "Final Conflict Count: " << conflicts << std::endl;
+
+	size_t empties = 0;
+	empties = mv::reduce<GridCell,size_t>([](size_t& acc, GridCell& cell) {
+		if(cell.type == GridCell::ContentType::Boundary && cell.parents.empty())
+			++acc;
+	}, gridCells, empties);
+
+	std::vector<const Mesh*> emptyCells;
+	emptyCells = mv::reduce<GridCell,std::vector<const Mesh*>>(
+		[](std::vector<const Mesh*>& list, GridCell& cell) {
+			if(cell.type == GridCell::ContentType::Boundary && cell.parents.empty())
+			{
+				list.push_back(std::addressof(cell.mesh));
+			}
+	}, gridCells, emptyCells);
+
+	fs::create_directory(config.outputDir + "/empties");
+	saveMeshes(config.outputDir + "/empties", emptyCells);
+
+	std::cout << "Final Empty Boundary Cell Count: " << empties << std::endl;
 
 	for(auto& meshBox: meshBoxes)
 		out.push_back(meshBox->mesh);
@@ -224,6 +272,8 @@ int run(int argc, const char* argv[])
 	std::cout << std::endl;
 	printConfig(config);
 	std::cout << std::endl;
+
+	initRandom(config.seed);
 
 	std::chrono::time_point<std::chrono::steady_clock> startIval = 
 		std::chrono::steady_clock::now();
@@ -256,29 +306,18 @@ int run(int argc, const char* argv[])
 	
 	std::vector<std::vector<Mesh>> subMeshSubDivs;
 	subMeshSubDivs.resize(subMeshes.size());
-	 
-	for(unsigned int index = 0; index < subMeshSubDivs.size(); ++index)
-		processSubMesh(config, subMeshes[index], subMeshSubDivs[index]);
 
 	fs::remove_all(config.outputDir);
 	fs::create_directory(config.outputDir);
 
+	for(unsigned int index = 0; index < subMeshSubDivs.size(); ++index)
+		processSubMesh(config, subMeshes[index], subMeshSubDivs[index]);
+
+
 	size_t meshIndex = 0;
 	for(const auto& subMesh: subMeshSubDivs)
 	{
-		const std::vector<Mesh>& subdivs = subMesh;
-		for(const Mesh& mesh: subdivs)
-		{
-			std::stringstream ss("");
-			ss << meshIndex << ".stl";
-
-			if(CGAL::IO::write_STL(config.outputDir + "/" + ss.str(), mesh))
-				std::cout << "Saved " << ss.str() << std::endl;
-			else
-				std::cerr << "Failed to write " << ss.str() << "!" << std::endl;
-
-			++meshIndex;
-		}
+		saveMeshes(config.outputDir, subMesh);
 	}
 
 	return EXIT_SUCCESS;

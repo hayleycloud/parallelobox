@@ -1,8 +1,15 @@
 #include "regiongrowth.h"
 #include "objective.h"
 #include "multivec.h"
+#include "resolve.h"
 #include <unordered_map>
 #include <optional>
+#include <filesystem>
+#include <sstream>
+
+namespace fs = std::filesystem;
+
+#define USE_CLUSTERS    false
 
 //void addCellsToMeshBox(
 //	mv::vector3<GridCell>& gridCells, 
@@ -61,11 +68,11 @@ std::vector<GridCell*> sampleCells(
 {
 	std::vector<GridCell*> cells;
 
-    for(int x = a.x; x <= b.x; ++x) 
+    for(int x = a.x; x < b.x; ++x)
 	{
-        for(int y = a.y; y <= b.y; ++y) 
+        for(int y = a.y; y < b.y; ++y)
 		{
-            for(int z = a.z; z <= b.z; ++z) 
+            for(int z = a.z; z < b.z; ++z)
 			{
 				GridCell* cell = std::addressof(mv::get(gridCells, x, y, z));
 				assert(cell);
@@ -91,7 +98,7 @@ std::vector<GridCell*> sampleCells(
 			--btmLeftOut.x;
 
 			Vector3D topLeftIn = 
-				btmLeftOut + Vector3D(0, box.dims.size.y, box.dims.size.z);
+				btmLeftOut + Vector3D(1, box.dims.size.y, box.dims.size.z);
 
 			return sampleCells(gridCells, btmLeftOut, topLeftIn);
 		}
@@ -101,63 +108,63 @@ std::vector<GridCell*> sampleCells(
 			//std::cout << "Growing Right..." << std::endl;
 
 			const Vector3D btmRightOut = 
-				box.dims.origin + Vector3D(box.dims.size.x + 1, 0, 0);
+				box.dims.origin + Vector3D(box.dims.size.x, 0, 0);
 			const Vector3D topRightIn = 
-				btmRightOut + Vector3D(0, box.dims.size.y, box.dims.size.z);
+				btmRightOut + Vector3D(1, box.dims.size.y, box.dims.size.z);
 
 			return sampleCells(gridCells, btmRightOut, topRightIn);
 		}
-		break;                                                 
-		case Direction::Up:                                             
-		{
-			//std::cout << "Growing Up..." << std::endl;
-
-			const Vector3D topLeftOut = 
-				box.dims.origin + Vector3D(0, box.dims.size.y + 1, 0);
-			const Vector3D topRightIn = 
-				topLeftOut + Vector3D(box.dims.size.x, 0, box.dims.size.z);
-
-			return sampleCells(gridCells, topLeftOut, topRightIn);
-		}
-		break;                                                      
-		case Direction::Down:                                           
+		break;
+		case Direction::Down:
 		{
 			//std::cout << "Growing Down..." << std::endl;
 
 			Vector3D btmLeftOut = box.dims.origin;
 			--btmLeftOut.y;
 
-			Vector3D btmRightIn = 
-				btmLeftOut + Vector3D(box.dims.size.x, 0, box.dims.size.z);
+			Vector3D btmRightIn =
+				btmLeftOut + Vector3D(box.dims.size.x, 1, box.dims.size.z);
 
 			return sampleCells(gridCells, btmLeftOut, btmRightIn);
 		}
-		break;                                                      
-		case Direction::In:                                             
+		break;
+		case Direction::Up:
 		{
-			//std::cout << "Growing In..." << std::endl;
+			//std::cout << "Growing Up..." << std::endl;
 
-			const Vector3D btmLeftIn = 
-				box.dims.origin + Vector3D(0, 0, box.dims.size.z + 1);
+			const Vector3D topLeftOut = 
+				box.dims.origin + Vector3D(0, box.dims.size.y, 0);
 			const Vector3D topRightIn = 
-				btmLeftIn + Vector3D(box.dims.size.x, box.dims.size.y, 0);
+				topLeftOut + Vector3D(box.dims.size.x, 1, box.dims.size.z);
 
-			return sampleCells(gridCells, btmLeftIn, topRightIn);
+			return sampleCells(gridCells, topLeftOut, topRightIn);
 		}
-		break;                                                      
-		case Direction::Out:                                            
+		break;
+		case Direction::Out:
 		{
 			//std::cout << "Growing Out..." << std::endl;
 
 			Vector3D btmLeftOut = box.dims.origin;
 			--btmLeftOut.z;
 
-			Vector3D topRightOut = 
-				btmLeftOut + Vector3D(box.dims.size.x, box.dims.size.y, 0);
+			Vector3D topRightOut =
+				btmLeftOut + Vector3D(box.dims.size.x, box.dims.size.y, 1);
 
 			return sampleCells(gridCells, btmLeftOut, topRightOut);
 		}
 		break;
+		case Direction::In:
+		{
+			//std::cout << "Growing In..." << std::endl;
+
+			const Vector3D btmLeftIn = 
+				box.dims.origin + Vector3D(0, 0, box.dims.size.z);
+			const Vector3D topRightIn = 
+				btmLeftIn + Vector3D(box.dims.size.x, box.dims.size.y, 1);
+
+			return sampleCells(gridCells, btmLeftIn, topRightIn);
+		}
+		break;                                                      
 	}
 
 	return {};
@@ -172,14 +179,11 @@ void grow(Direction direction, mv::vector3<GridCell>& gridCells, MeshBox& box)
 		{
 			//std::cout << "Growing Left..." << std::endl;
 
+			std::vector<GridCell*> cells = sampleExpand(Direction::Left, gridCells, box);
+
 			--box.dims.origin.x;
 			++box.dims.size.x;
 
-			const Vector3D& btmLeftOut = box.dims.origin;
-			const Vector3D topLeftIn = 
-				btmLeftOut + Vector3D(0, box.dims.size.y, box.dims.size.z);
-
-			std::vector<GridCell*> cells = sampleCells(gridCells, btmLeftOut, topLeftIn);
 			addCellsToMeshBox(box, cells);
 		}
 		break;                                                      
@@ -187,77 +191,59 @@ void grow(Direction direction, mv::vector3<GridCell>& gridCells, MeshBox& box)
 		{
 			//std::cout << "Growing Right..." << std::endl;
 
+			std::vector<GridCell*> cells = sampleExpand(Direction::Right, gridCells, box);
+
 			++box.dims.size.x;
 
-			const Vector3D btmRightOut = 
-				box.dims.origin + Vector3D(box.dims.size.x, 0, 0);
-			const Vector3D topRightIn = 
-				btmRightOut + Vector3D(0, box.dims.size.y, box.dims.size.z);
-
-			std::vector<GridCell*> cells = sampleCells(gridCells, btmRightOut, topRightIn);
 			addCellsToMeshBox(box, cells);
 		}
-		break;                                                 
-		case Direction::Up:                                             
-		{
-			//std::cout << "Growing Up..." << std::endl;
-
-			++box.dims.size.y;
-
-			const Vector3D topLeftOut = 
-				box.dims.origin + Vector3D(0, box.dims.size.y, 0);
-			const Vector3D topRightIn = 
-				topLeftOut + Vector3D(box.dims.size.x, 0, box.dims.size.z);
-
-			std::vector<GridCell*> cells = sampleCells(gridCells, topLeftOut, topRightIn);
-			addCellsToMeshBox(box, cells);
-		}
-		break;                                                      
-		case Direction::Down:                                           
+		break;
+		case Direction::Down:
 		{
 			//std::cout << "Growing Down..." << std::endl;
+
+			std::vector<GridCell*> cells = sampleExpand(Direction::Down, gridCells, box);
 
 			--box.dims.origin.y;
 			++box.dims.size.y;
 
-			const Vector3D& btmLeftOut = box.dims.origin;
-			const Vector3D btmRightIn = 
-				btmLeftOut + Vector3D(box.dims.size.x, 0, box.dims.size.z);
-
-			std::vector<GridCell*> cells = sampleCells(gridCells, btmLeftOut, btmRightIn);
 			addCellsToMeshBox(box, cells);
 		}
-		break;                                                      
-		case Direction::In:                                             
+		break;
+		case Direction::Up:
 		{
-			//std::cout << "Growing In..." << std::endl;
+			//std::cout << "Growing Up..." << std::endl;
 
-			++box.dims.size.z;
+			std::vector<GridCell*> cells = sampleExpand(Direction::Up, gridCells, box);
 
-			const Vector3D btmLeftIn = 
-				box.dims.origin + Vector3D(0, 0, box.dims.size.z);
-			const Vector3D topRightIn = 
-				btmLeftIn + Vector3D(box.dims.size.x, box.dims.size.y, 0);
+			++box.dims.size.y;
 
-			std::vector<GridCell*> cells = sampleCells(gridCells, btmLeftIn, topRightIn);
 			addCellsToMeshBox(box, cells);
 		}
-		break;                                                      
-		case Direction::Out:                                            
+		break;
+		case Direction::Out:
 		{
 			//std::cout << "Growing Out..." << std::endl;
+
+			std::vector<GridCell*> cells = sampleExpand(Direction::Out, gridCells, box);
 
 			--box.dims.origin.z;
 			++box.dims.size.z;
 
-			const Vector3D& btmLeftOut = box.dims.origin;
-			const Vector3D topRightOut = 
-				btmLeftOut + Vector3D(box.dims.size.x, box.dims.size.y, 0);
-
-			std::vector<GridCell*> cells = sampleCells(gridCells, btmLeftOut, topRightOut);
 			addCellsToMeshBox(box, cells);
 		}
 		break;
+		case Direction::In:
+		{
+			//std::cout << "Growing In..." << std::endl;
+
+			std::vector<GridCell*> cells = sampleExpand(Direction::In, gridCells, box);
+
+			++box.dims.size.z;
+
+			addCellsToMeshBox(box, cells);
+		}
+		break;                                                      
 	}
 }
 
@@ -469,7 +455,10 @@ std::optional<Cuboid> extendRegionIn(
 	
 	std::optional<Cuboid> newRegion = extendRegionIn(direction, region.dims, grid);
 	if(!newRegion)
+	{
+		std::cout << "\t\tCannot grow " << toText(direction) << "." << std::endl;
 		return 0.0;
+	}
 
 	//std::vector<GridCell*> samplesOld, samplesNew;
 	//sampleCells(gridCells, region.dims, samplesOld);
@@ -482,24 +471,42 @@ std::optional<Cuboid> extendRegionIn(
 
 	//std::cout << numBoxesOld << " " << numBoxesNew << std::endl;
 	if(samples.empty())
+	{
+		std::cout << "\t\tSampling " << toText(direction) << " is empty." << std::endl;
 		return 0.0;
+	}
 
 	bool empty = true;
-	bool unassigned = false;
+	bool anyUnassigned = false;
+	bool willOverlap = false;
 	for(GridCell* cell: samples)
 	{
 		if(cell->type == GridCell::ContentType::Boundary)
 		{
 			empty = false;
 			if(cell->parents.empty())
-				unassigned = true;
+				anyUnassigned = true;
 		}
+
+		if(!cell->parents.empty())
+			willOverlap = true;
 	}
 
 	if(empty)
-		return 0.0;
-	if(!unassigned)
-		return 0.0;
+	{
+		std::cout << "\t\tCells " << toText(direction) << " are empty." << std::endl;
+		return -1.0;
+	}
+	if(willOverlap)
+	{
+		std::cout << "\t\tGrowth " << toText(direction) << " will overlap." << std::endl;
+		return -1.0;
+	}
+	if(!anyUnassigned)
+	{
+		std::cout << "\t\tAssigned cells " << toText(direction) << "." << std::endl;
+		return -1.0;
+	}
 
 	// Compute new MeshBox
 	///////////////////////////////////////////////////////////////////////////
@@ -512,8 +519,12 @@ std::optional<Cuboid> extendRegionIn(
 	///////////////////////////////////////////////////////////////////////////
 	
 	//std::cout << fitsVolume(config, newMeshBox.mesh) << std::endl;
-	if(!fitsVolume(config, newMeshBox.mesh))
+	/*if(!fitsVolume(config, newMeshBox.mesh))
+	{
+		std::cout << "\tGrowth " << toText(direction) << " does not fit volume!" << std::endl;
 		return 0.0;
+	}*/
+	// @TODO: Volume constraints are necessary!
 
 	// Penalisation of Proximity
 	///////////////////////////////////////////////////////////////////////////
@@ -647,6 +658,50 @@ void fastAssign(
 	recomputeAABBs(sourceBoxes);
 }
 
+bool growBoxIfPossible(
+	const Config& config,
+	const Mesh& parent,
+	MeshBox& targetBox,
+	std::vector<std::unique_ptr<MeshBox>>& sourceBoxes,
+	mv::vector3<GridCell>& gridCells,
+	Grid& grid)
+{
+	std::cout << "\tComputing score for " << std::addressof(targetBox)
+	          << " " << targetBox.dims
+	          << ":" << std::endl;
+
+	const std::array<Direction,6> directions = {
+		Direction::Left, Direction::Right,
+		Direction::Up, Direction::Down,
+		Direction::In, Direction::Out
+	};
+	std::unordered_map<Direction,double> scores;
+
+	for(Direction direction: directions)
+	{
+		double score = computeScore(
+			config, parent,
+			direction,
+			targetBox, sourceBoxes,
+			grid, gridCells);
+		scores[direction] = score;
+	}
+
+	Direction bestDirection = getBestDirection(scores);
+	if(scores[bestDirection] > 0.0)
+	{
+		std::cout << "\tBest Score: " << toText(bestDirection)
+		          << " = " << scores[bestDirection] << std::endl;
+		grow(bestDirection, gridCells, targetBox);
+		return true;
+	}
+	else
+	{
+		std::cout << "\tNo possible directions detected." << std::endl;
+		return false;
+	}
+}
+
 [[nodiscard]]
 bool continueRegionGrowth(
 	std::vector<std::unique_ptr<MeshBox>>& sourceBoxes, 
@@ -666,6 +721,25 @@ bool continueRegionGrowth(
 	return remainingCells > 0;
 }
 
+void saveMeshes(
+	const std::string& directory,
+	const std::vector<std::unique_ptr<MeshBox>>& meshes)
+{
+	unsigned int meshIndex = 0;
+	for(const auto& mesh: meshes)
+	{
+		std::stringstream ss("");
+		ss << meshIndex << ".stl";
+
+		if(CGAL::IO::write_STL(directory + "/" + ss.str(), mesh->mesh))
+			std::cout << "Saved " << directory << "/" << ss.str() << std::endl;
+		else
+			std::cerr << "Failed to write " << ss.str() << "!" << std::endl;
+
+		++meshIndex;
+	}
+}
+
 void regionGrowth(
 	const Config& config,
 	const Mesh& parent,
@@ -673,6 +747,7 @@ void regionGrowth(
 	mv::vector3<GridCell>& gridCells,
 	Grid& grid)
 {
+#if USE_CLUSTERS == true
 	fastAssign(sourceBoxes, gridCells);
 
 	#pragma omp parallel for default(none) shared(sourceBoxes, grid, parent)
@@ -683,67 +758,62 @@ void regionGrowth(
 
 	bool test = continueRegionGrowth(sourceBoxes, gridCells);
 	printMeshBoxes(sourceBoxes);
-
-
-	/*unsigned int iterNum = 1;
+#else
+	unsigned int iterNum = 1;
 	while(continueRegionGrowth(sourceBoxes, gridCells))
 	{
 		std::cout << "Region Growth Iteration " << iterNum << std::endl;
 
-		// Enumerate best directions of growth
-		// TODO: Enable parallelism
-		//#pragma omp parallel for
-		
-		MeshBox* worstBox = nullptr;
-		double worstCost = std::numeric_limits<double>::max();
+		typedef std::pair<MeshBox*,double> BoxScore;
+
+		std::list<BoxScore> rankedBoxes;
 		for(auto& sourceBox: sourceBoxes)
 		{
 			double printCost = printingCost(config, sourceBox->mesh);
-			if(printCost < worstCost)
+			rankedBoxes.emplace_back(sourceBox.get(), printCost);
+		}
+
+		rankedBoxes.sort([](const BoxScore& a, const BoxScore& b) {
+			return a.second < b.second;
+		});
+
+		bool onePassed = false;
+		for(auto& box: rankedBoxes)
+		{
+			if(growBoxIfPossible(
+				config, parent, *box.first, sourceBoxes, gridCells, grid))
 			{
-				worstBox = sourceBox.get();
-				worstCost = printCost;
+				onePassed = true;
+				break;
 			}
 		}
 
-		std::cout << "\tComputing score for " << worstBox
-				  << " " << worstBox->dims
-				  << ":" << std::endl;
-
-		const std::array<Direction,6> directions = {
-			Direction::Left, Direction::Right,
-			Direction::Up, Direction::Down,
-			Direction::In, Direction::Out
-		};
-		std::unordered_map<Direction,double> scores;
-
-		for(Direction direction: directions)
-		{
-			double score = computeScore(
-				config, parent,
-				direction, 
-				*worstBox, sourceBoxes, 
-				grid, gridCells);
-			scores[direction] = score;
-		}
-
-		Direction bestDirection = getBestDirection(scores);
-		if(scores[bestDirection] > 0.0)
-		{
-			std::cout << "\tBest Score: " << toText(bestDirection)
-					  << " = " << scores[bestDirection] << std::endl;
-			//#pragma omp critical
-			grow(bestDirection, gridCells, *worstBox);
-		}
-		else
-			std::cout << "\tNo possible directions detected." << std::endl;
-
 		// Recompute meshes
 		// (Not sure if necessary, but for sanity at this stage)
-		#pragma omp parallel for
+		#pragma omp parallel for default(none) shared(sourceBoxes, grid, parent)
 		for(auto& sourceBox: sourceBoxes)
 			clipFromMesh(grid, parent, *sourceBox);
 
+		if(!onePassed)
+		{
+			std::cout << "Algorithm has locked." << std::endl;
+			return;
+		}
+
+		std::stringstream ss("");
+		ss << config.outputDir << "/dir" << iterNum;
+		fs::create_directory(ss.str());
+
+		saveMeshes(ss.str(), sourceBoxes);
+
+		if(!enumerateConflicts(sourceBoxes, gridCells))
+		{
+			std::cout << std::endl << std::endl << std::endl << std::endl;
+			std::cout << "ERROR: SHOULD NOT OVERLAP!!!!" << std::endl;
+			return;
+		}
+
 		++iterNum;
-	}*/
+	}
+#endif
 }

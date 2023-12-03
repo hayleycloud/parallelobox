@@ -24,7 +24,12 @@ typedef Mesh::Property_map<face_descriptor, K::Vector_3> MeshNormalsMap;
 constexpr double r = 180.0 / std::numbers::pi;
 
 enum class Direction {
-	Left, Right, Up, Down, In, Out
+	Right,  // +X
+	Left,   // -X
+	Up,     // +Y
+	Down,   // -Y
+	In,     // +Z
+	Out     // -Z
 };
 
 std::string toText(Direction direction);

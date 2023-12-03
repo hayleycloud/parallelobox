@@ -1,9 +1,12 @@
 #pragma once
 
 #include <random>
+#include <optional>
 
 extern std::random_device randDev;
 extern std::mt19937 randEng;
+
+void initRandom(std::optional<unsigned int> seed);
 
 template<class T>
 using RNGReal = std::uniform_real_distribution<T>;
