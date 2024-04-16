@@ -800,12 +800,6 @@ void regionGrowth(
 			return;
 		}
 
-		std::stringstream ss("");
-		ss << config.outputDir << "/dir" << iterNum;
-		fs::create_directory(ss.str());
-
-		saveMeshes(ss.str(), sourceBoxes);
-
 		if(!enumerateConflicts(sourceBoxes, gridCells))
 		{
 			std::cout << std::endl << std::endl << std::endl << std::endl;
@@ -815,5 +809,11 @@ void regionGrowth(
 
 		++iterNum;
 	}
+
+	std::stringstream ss("");
+	ss << config.outputDir << "/dir" << iterNum;
+	fs::create_directory(ss.str());
+
+	saveMeshes(ss.str(), sourceBoxes);
 #endif
 }

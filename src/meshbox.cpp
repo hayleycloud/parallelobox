@@ -87,6 +87,34 @@ void getSurfaceBoxes(
 	}
 }
 
+Cuboid getDimsFrom(const std::vector<const GridCell*>& children)
+{
+	constexpr int MAX_INT = std::numeric_limits<int>::max();
+	constexpr int MIN_INT = std::numeric_limits<int>::min();
+	Vector3D min(MAX_INT, MAX_INT, MAX_INT), max(MIN_INT, MIN_INT, MIN_INT);
+	for(const GridCell* child: children)
+	{
+		if(child->position.x < min.x)
+			min.x = child->position.x;
+		if(child->position.x > max.x)
+			max.x = child->position.x;
+		
+		if(child->position.y < min.y)
+			min.y = child->position.y;
+		if(child->position.y > max.y)
+			max.y = child->position.y;
+
+		if(child->position.z < min.z)
+			min.z = child->position.z;
+		if(child->position.z > max.z)
+			max.z = child->position.z;
+	}
+
+	Vector3D size(max.x - min.x, max.y - min.y, max.z - min.z);
+
+	return { min, size };
+}
+
 Cuboid getDimsFrom(std::vector<GridCell*>& children)
 {
 	constexpr int MAX_INT = std::numeric_limits<int>::max();
@@ -113,6 +141,98 @@ Cuboid getDimsFrom(std::vector<GridCell*>& children)
 	Vector3D size(max.x - min.x, max.y - min.y, max.z - min.z);
 
 	return { min, size };
+}
+
+
+void resetGridCells(mv::vector3<GridCell>& gridCells)
+{
+	mv::forEach<GridCell>([](GridCell& cell) {
+		cell.parents.clear();
+	}, gridCells);
+}
+
+bool getNeighbouringEmptyCells(
+	const Vector3D& position,
+	const Grid& grid, 
+	const mv::vector3<GridCell>& gridCells,
+	std::set<const GridCell*>& emptyCells)
+{
+	//assert(
+	//	mv::get(gridCells, position.x, position.y, position.z).type == GridCell::ContentType::Boundary &&
+	//	mv::get(gridCells, position.x, position.y, position.z).parents.empty());
+
+	const GridCell& cell = mv::get(gridCells, position.x, position.y, position.z);
+	if(cell.type != GridCell::ContentType::Boundary || !cell.parents.empty())
+		return false;
+
+	if(emptyCells.insert(std::addressof(cell)).second == false)
+		return false;
+
+	const std::vector<Vector3D> directions = {
+		Vector3D(-1, 0, 0),	Vector3D(1, 0, 0),
+		Vector3D(0, -1, 0), Vector3D(0, 1, 0),
+		Vector3D(0, 0, -1), Vector3D(0, 0, 1)
+	};
+	std::vector<Vector3D> positions;
+	for(const Vector3D& direction: directions)
+	{
+		Vector3D newPos = position + direction;
+		if(newPos.x >= 0 && newPos.y >= 0 && newPos.z >= 0
+			&& newPos.x < grid.getNumBoxesX() && newPos.y < grid.getNumBoxesY() && newPos.z < grid.getNumBoxesZ())
+		getNeighbouringEmptyCells(newPos, grid, gridCells, emptyCells);
+	}
+
+	return true;
+}
+
+int calcDiscreteRegions(
+	const Grid& grid, 
+	mv::vector3<GridCell>& gridCells, 
+	std::vector<std::vector<const GridCell*>>& regions)
+{
+	std::set<const GridCell*> allEmptyCells;
+
+	while(true)
+	{
+		std::set<const GridCell*> emptyCells;
+
+		bool found = false;
+		Vector3D seedPos;
+		mv::forEachIndexed<GridCell>([&](const GridCell& cell, int x, int y, int z) {
+			if(!found && 
+			   cell.type == GridCell::ContentType::Boundary && 
+			   cell.parents.empty())
+			{
+				if(!allEmptyCells.contains(std::addressof(cell)))
+				{
+					found = true;
+					seedPos = Vector3D(x, y, z);
+				}
+			}
+		}, gridCells);
+
+		if(!found)
+			return regions.size();
+
+		getNeighbouringEmptyCells(seedPos, grid, gridCells, emptyCells);
+		for(const GridCell* cell: emptyCells)
+			allEmptyCells.insert(cell);
+		regions.emplace_back(std::vector<const GridCell*>(emptyCells.cbegin(), emptyCells.cend()));
+	}
+}
+
+int getDiscreteEmptyRegions(
+	const Grid& grid,
+	mv::vector3<GridCell>& gridCells,
+	std::vector<Cuboid>& emptyRegions)
+{
+	std::vector<std::vector<const GridCell*>> regionCells;
+	int numRegions = calcDiscreteRegions(grid, gridCells, regionCells);
+
+	for(const auto& region: regionCells)
+		emptyRegions.emplace_back(getDimsFrom(region));
+
+	return numRegions;
 }
 
 /*void getChildrenFromSide(

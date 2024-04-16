@@ -47,6 +47,16 @@ void getSurfaceBoxes(
 	int numPrinters);
 	//std::vector<std::unique_ptr<MeshBox>>& meshBoxes);
 
+int calcDiscreteRegions(
+	const Grid& grid, 
+	mv::vector3<GridCell>& gridCells, 
+	std::vector<std::set<const GridCell*>>& regions);
+
+int getDiscreteEmptyRegions(
+	const Grid& grid,
+	mv::vector3<GridCell>& gridCells,
+	std::vector<Cuboid>& emptyRegions);
+
 /*void getChildrenFromSide(
 	mv::vector3<GridCell>& gridCells, 
 	MeshBox* meshBox, 
@@ -54,6 +64,8 @@ void getSurfaceBoxes(
 	int sideIndex);*/
 
 void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child);
+
+void resetGridCells(mv::vector3<GridCell>& gridCells);
 
 /*void getUniqueMeshBoxes(
 	mv::vector3<GridCell>& gridCells, 

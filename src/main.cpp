@@ -148,6 +148,27 @@ void verifyClusters(
 	}
 }
 
+[[nodiscard]]
+std::vector<Cluster> filterVerifiedClusters(
+	const std::vector<Cluster>& clusters,
+	const K::Point_3& min, const K::Point_3& max)
+{
+	std::vector<Cluster> filtered;
+
+	for(const Cluster& cluster: clusters)
+	{
+		const K::Point_3& centroid = cluster.centroid;
+		if(    centroid.x() > min.x() && centroid.x() < max.x()
+			&& centroid.y() > min.y() && centroid.y() < max.y()
+			&& centroid.z() > min.z() && centroid.z() < max.z())
+		{
+			filtered.push_back(cluster);
+		}
+	}
+
+	return filtered;
+}
+
 void saveMeshes(const std::string& directory, const std::vector<const Mesh*>& meshes)
 {
 	unsigned int meshIndex = 0;
@@ -219,26 +240,45 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 
 	//CGAL::IO::write_STL("out/mesh.stl", mesh);
 
-	std::vector<Cluster> clusters = getClusters(config.numPrinters, mesh);
-	verifyClusters(clusters, min, max);
-	std::vector<std::unique_ptr<MeshBox>> meshBoxes = 
-		getSourceMeshBoxesFrom(clusters, grid, gridCells);
+	std::vector<std::unique_ptr<MeshBox>> meshBoxes;
+	for(unsigned int i = config.numPrinters; i > 1; --i)
+	{
+		resetGridCells(gridCells);
 
-	enumerateConflicts(meshBoxes, gridCells);
+		std::vector<Cluster> clusters = getClusters(i, mesh);
+		clusters = filterVerifiedClusters(clusters, min, max);
+		meshBoxes = getSourceMeshBoxesFrom(clusters, grid, gridCells);
 
-	regionGrowth(config, mesh, meshBoxes, gridCells, grid);
+		enumerateConflicts(meshBoxes, gridCells);
 
-	//resolveConflicts(mesh, meshBoxes, gridCells, grid);
+		regionGrowth(config, mesh, meshBoxes, gridCells, grid);
 
-	enumerateConflicts(meshBoxes, gridCells);
+		//resolveConflicts(mesh, meshBoxes, gridCells, grid);
 
-	size_t conflicts = 0;
-	conflicts = mv::reduce<GridCell,size_t>([](size_t& acc, GridCell& cell) {
-		if(cell.type == GridCell::ContentType::Boundary && cell.parents.size() > 1)
-			++acc;
-	}, gridCells, conflicts);
+		enumerateConflicts(meshBoxes, gridCells);
 
-	std::cout << "Final Conflict Count: " << conflicts << std::endl;
+		size_t conflicts = 0;
+		conflicts = mv::reduce<GridCell, size_t>([](size_t &acc, GridCell &cell) {
+			if (cell.type == GridCell::ContentType::Boundary && cell.parents.size() > 1)
+				++acc;
+		}, gridCells, conflicts);
+
+		std::vector<Cuboid> emptyRegions;
+		size_t numEmptyRegions = getDiscreteEmptyRegions(grid, gridCells, emptyRegions);
+
+		std::cout << numEmptyRegions << " empty regions." << std::endl;
+
+		if(numEmptyRegions > (config.numPrinters - meshBoxes.size()))
+		{
+			std::cout << "\tInvalid!" << std::endl;
+		}
+		else
+		{
+			std::cout << "\tSuccess!" << std::endl;
+		}
+
+		std::cout << "Final Conflict Count: " << conflicts << std::endl;
+	}
 
 	size_t empties = 0;
 	empties = mv::reduce<GridCell,size_t>([](size_t& acc, GridCell& cell) {
