@@ -15,3 +15,5 @@ bool fitsVolume(const Config& config, const Mesh& mesh);
 
 double fitness(const Config& config, const Mesh& mesh);
 
+double fullScore(const Config& config, const std::vector<const Mesh*>& printers);
+

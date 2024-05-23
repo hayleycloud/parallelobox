@@ -294,14 +294,14 @@ std::optional<Cuboid> extendRegionIn(
 		case Direction::Right:                                          
 		{
 			++cuboid.size.x;
-			if(cuboid.end().x >= grid.getNumBoxesX())
+			if(cuboid.end().x > grid.getNumBoxesX())
 				return std::nullopt;
 		}
 		break;                                                 
 		case Direction::Up:                                             
 		{
 			++cuboid.size.y;
-			if(cuboid.end().y >= grid.getNumBoxesY())
+			if(cuboid.end().y > grid.getNumBoxesY())
 				return std::nullopt;
 		}
 		break;                                                      
@@ -317,7 +317,7 @@ std::optional<Cuboid> extendRegionIn(
 		case Direction::In:                                             
 		{
 			++cuboid.size.z;
-			if(cuboid.end().z >= grid.getNumBoxesZ())
+			if(cuboid.end().z > grid.getNumBoxesZ())
 				return std::nullopt;
 		}
 		break;                                                      

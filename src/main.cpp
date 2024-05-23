@@ -7,6 +7,7 @@
 //#include "blockmerge.h"
 #include "clustering.h"
 #include "regiongrowth.h"
+#include "objective.h"
 #include "resolve.h"
 #include "multivec.h"
 #include "random.h"
@@ -239,10 +240,14 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 	}, gridCells);*/
 
 	//CGAL::IO::write_STL("out/mesh.stl", mesh);
+	
+	std::vector<double> itrScores;
 
 	std::vector<std::unique_ptr<MeshBox>> meshBoxes;
 	for(unsigned int i = config.numPrinters; i > 1; --i)
 	{
+		double score = 0.0;
+
 		resetGridCells(gridCells);
 
 		std::vector<Cluster> clusters = getClusters(i, mesh);
@@ -271,6 +276,7 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 		if(numEmptyRegions > (config.numPrinters - meshBoxes.size()))
 		{
 			std::cout << "\tInvalid!" << std::endl;
+			score = -1.0;
 		}
 		else
 		{
@@ -278,27 +284,85 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 		}
 
 		std::cout << "Final Conflict Count: " << conflicts << std::endl;
+
+		std::vector<const Mesh*> mbPtrs;
+		for(auto& mb: meshBoxes)
+			mbPtrs.push_back(&mb->mesh);
+
+		std::stringstream sis("");
+		sis << i;
+		std::string dirName = config.outputDir + "/itr" + sis.str();
+		fs::create_directory(dirName);
+		saveMeshes(dirName, mbPtrs);
+
+		std::vector<MeshBox> emptyMeshBoxes;
+		for(const Cuboid& region: emptyRegions)
+		{
+			emptyMeshBoxes.emplace_back(MeshBox(region));
+			clipFromMesh(grid, mesh, emptyMeshBoxes.back());
+			std::cout << "\t" << region << std::endl;
+		}
+
+		std::vector<const Mesh*> embPtrs;
+		for(const MeshBox& mb: emptyMeshBoxes)
+			embPtrs.push_back(&mb.mesh);
+
+		std::string dirNameEmpties = dirName + "/empties";
+		fs::create_directory(dirNameEmpties);
+		saveMeshes(dirNameEmpties, embPtrs);
+
+		if(score >= 0.0)
+			score = fullScore(config, mbPtrs);
+		itrScores.push_back(score);
+
+		int b = 3;
+		std::cin >> b;
 	}
 
-	size_t empties = 0;
-	empties = mv::reduce<GridCell,size_t>([](size_t& acc, GridCell& cell) {
-		if(cell.type == GridCell::ContentType::Boundary && cell.parents.empty())
-			++acc;
-	}, gridCells, empties);
+	//size_t empties = 0;
+	//empties = mv::reduce<GridCell,size_t>([](size_t& acc, GridCell& cell) {
+	//	if(cell.type == GridCell::ContentType::Boundary && cell.parents.empty())
+	//		++acc;
+	//}, gridCells, empties);
 
-	std::vector<const Mesh*> emptyCells;
-	emptyCells = mv::reduce<GridCell,std::vector<const Mesh*>>(
-		[](std::vector<const Mesh*>& list, GridCell& cell) {
-			if(cell.type == GridCell::ContentType::Boundary && cell.parents.empty())
+	//std::vector<const Mesh*> emptyCells;
+	//emptyCells = mv::reduce<GridCell,std::vector<const Mesh*>>(
+	//	[](std::vector<const Mesh*>& list, GridCell& cell) {
+	//		if(cell.type == GridCell::ContentType::Boundary && cell.parents.empty())
+	//		{
+	//			list.push_back(std::addressof(cell.mesh));
+	//		}
+	//}, gridCells, emptyCells);
+
+	//fs::create_directory(config.outputDir + "/empties");
+	//saveMeshes(config.outputDir + "/empties", emptyCells);
+
+	//std::cout << "Final Empty Boundary Cell Count: " << empties << std::endl;
+	
+	int itrIndex = 0, bestIndex = -1;
+	double bestScore = std::numeric_limits<double>::max();
+	int numPrinters = config.numPrinters;
+	for(double score: itrScores)
+	{
+		std::cout << "Iteration " << itrIndex+1 << ": " << numPrinters 
+			      << " printers => ";
+		if(score < 0.0)
+			std::cout << "Failed";
+		else 
+		{
+			if(score < bestScore)
 			{
-				list.push_back(std::addressof(cell.mesh));
+				bestScore = score;
+				bestIndex = itrIndex;
 			}
-	}, gridCells, emptyCells);
+			std::cout << "Success [score = " << score << "]!";
+		}
+		std::cout << std::endl;
+		itrIndex++;
+		numPrinters--;
+	}
 
-	fs::create_directory(config.outputDir + "/empties");
-	saveMeshes(config.outputDir + "/empties", emptyCells);
-
-	std::cout << "Final Empty Boundary Cell Count: " << empties << std::endl;
+	std::cout << "Best Iteration: " << bestIndex+1 << std::endl;
 
 	for(auto& meshBox: meshBoxes)
 		out.push_back(meshBox->mesh);

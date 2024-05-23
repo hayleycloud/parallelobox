@@ -47,3 +47,17 @@ double fitness(const Config& config, const Mesh& mesh)
 
 	return printCost + fitVolumeCost;
 }
+
+double fullScore(const Config& config, const std::vector<const Mesh*>& printers)
+{
+	double highestCost = std::numeric_limits<double>::min();
+
+	for(const Mesh* mesh: printers)
+	{
+		double printCost = printingCost(config, *mesh);
+		if(printCost > highestCost)
+			highestCost = printCost;
+	}
+
+	return highestCost;
+}

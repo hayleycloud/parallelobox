@@ -110,7 +110,7 @@ Cuboid getDimsFrom(const std::vector<const GridCell*>& children)
 			max.z = child->position.z;
 	}
 
-	Vector3D size(max.x - min.x, max.y - min.y, max.z - min.z);
+	Vector3D size((max.x - min.x) + 1, (max.y - min.y) + 1, (max.z - min.z) + 1);
 
 	return { min, size };
 }
@@ -138,7 +138,7 @@ Cuboid getDimsFrom(std::vector<GridCell*>& children)
 			max.z = child->position.z;
 	}
 
-	Vector3D size(max.x - min.x, max.y - min.y, max.z - min.z);
+	Vector3D size((max.x - min.x) + 1, (max.y - min.y) + 1, (max.z - min.z) + 1);
 
 	return { min, size };
 }
