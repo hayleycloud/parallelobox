@@ -197,7 +197,11 @@ void saveMeshes(const std::string& directory, const std::vector<Mesh>& meshes)
 	saveMeshes(directory, meshPtrs);
 }
 
-void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
+void processSubMesh(
+	const Config& config, 
+	int subIndex,
+	Mesh& mesh, 
+	std::vector<Mesh>& out)
 {
 	recenter(mesh);
 
@@ -291,7 +295,7 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 
 		std::stringstream sis("");
 		sis << i;
-		std::string dirName = config.outputDir + "/itr" + sis.str();
+		std::string dirName = parentDirectory + "/itr" + sis.str();
 		fs::create_directory(dirName);
 		saveMeshes(dirName, mbPtrs);
 
@@ -341,7 +345,7 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 	
 	int itrIndex = 0, bestIndex = -1;
 	double bestScore = std::numeric_limits<double>::max();
-	int numPrinters = config.numPrinters;
+	int numPrinters = config.numPrinters, bestNumPrinters;
 	for(double score: itrScores)
 	{
 		std::cout << "Iteration " << itrIndex+1 << ": " << numPrinters 
@@ -354,6 +358,7 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 			{
 				bestScore = score;
 				bestIndex = itrIndex;
+				bestNumPrinters = numPrinters;
 			}
 			std::cout << "Success [score = " << score << "]!";
 		}
@@ -362,7 +367,15 @@ void processSubMesh(const Config& config, Mesh& mesh, std::vector<Mesh>& out)
 		numPrinters--;
 	}
 
-	std::cout << "Best Iteration: " << bestIndex+1 << std::endl;
+	std::cout << "Best Iteration: " << bestIndex+1;
+	std::cout << " (# printers: " << bestNumPrinters << ")" << std::endl;
+
+	// Move correct folder to main
+	std::stringstream sms("");
+	sms << bestNumPrinters;
+	std::string bestDir = parentDirectory + "/itr" + sms.str();
+
+	fs::rename(bestDir, parentDirectory + "/best");
 
 	for(auto& meshBox: meshBoxes)
 		out.push_back(meshBox->mesh);
@@ -415,7 +428,15 @@ int run(int argc, const char* argv[])
 	fs::create_directory(config.outputDir);
 
 	for(unsigned int index = 0; index < subMeshSubDivs.size(); ++index)
-		processSubMesh(config, subMeshes[index], subMeshSubDivs[index]);
+	{
+		std::stringstream ss("");
+		ss << index;
+
+		std::string dirName = config.outputDir + "/" + ss.str();
+		fs::create_directory(dirName);
+
+		processSubMesh(config, index, subMeshes[index], subMeshSubDivs[index]);
+	}
 
 
 	size_t meshIndex = 0;
