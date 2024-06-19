@@ -157,10 +157,6 @@ bool getNeighbouringEmptyCells(
 	const mv::vector3<GridCell>& gridCells,
 	std::set<const GridCell*>& emptyCells)
 {
-	//assert(
-	//	mv::get(gridCells, position.x, position.y, position.z).type == GridCell::ContentType::Boundary &&
-	//	mv::get(gridCells, position.x, position.y, position.z).parents.empty());
-
 	const GridCell& cell = mv::get(gridCells, position.x, position.y, position.z);
 	if(cell.type != GridCell::ContentType::Boundary || !cell.parents.empty())
 		return false;
@@ -234,25 +230,6 @@ int getDiscreteEmptyRegions(
 
 	return numRegions;
 }
-
-/*void getChildrenFromSide(
-	mv::vector3<GridCell>& gridCells, 
-	MeshBox* meshBox, 
-	std::vector<GridCell*>& children, 
-	int sideIndex)
-{
-	mv::forEach<GridCell>([&](GridCell& cell) {
-		if(cell.sideParents[sideIndex] == meshBox)
-			children.push_back(std::addressof(cell));
-	}, gridCells);
-}
-
-void reparentChildrenForSide(
-	std::vector<GridCell*>& children, MeshBox* parent, int sideIndex)
-{
-	for(GridCell* child: children)
-		child->sideParents[sideIndex] = parent;
-}*/
 
 void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child)
 {

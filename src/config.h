@@ -24,6 +24,8 @@ struct Config
 
 	int numPrinters;
 
+	int sampleTries;
+
 	double granularityScale;
 
 	double infillRate;
@@ -33,6 +35,7 @@ struct Config
 	std::optional<unsigned int> seed;
 
 	bool symmetrySkip;
+	bool cleanupOutDirAfter;
 };
 
 Config handleArguments(const Arguments& args);

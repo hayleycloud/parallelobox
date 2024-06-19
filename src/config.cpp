@@ -150,6 +150,9 @@ void printUsage() {
 	std::cout << "  --printer <file>        Load printer settings from <file>." << std::endl;
 	std::cout << "                          [default: \"printers/default.ini\"]." << std::endl;
 	std::cout << "  --infill <rate>         Infill rate (1.0 = 100%, 0.5 = 50%)." << std::endl;
+	std::cout << "  --skip-symmetry         Skip the initial symmetry partition." << std::endl;
+	std::cout << "  --sample-tries          Number of times to try km++ seeding." << std::endl;
+	std::cout << "  --clean-out             Remove intermediates from output dir." << std::endl;
 	std::cout << "  --help                  Print this usage documentation." << std::endl;
 	std::cout << std::endl;
 	std::cout << "Options --in, --num, and --out are mandatory." << std::endl;
@@ -231,6 +234,18 @@ void printUsage() {
 	else
 		config.symmetrySkip = false;
 
+	int sampleTries = 3;
+	auto sampleTriesArg = args.getInt("--sample-tries");
+	if(sampleTriesArg)
+		sampleTries = *sampleTriesArg;
+	config.sampleTries = sampleTries;
+
+	auto cleanAfter = args.getFlag("--clean-out");
+	if(cleanAfter)
+		config.cleanupOutDirAfter = true;
+	else
+		config.cleanupOutDirAfter = false;
+
 	INIFile printerConfig = loadINIFile(printerConfigFile);
 	config.printer = makePrinterSpec(printerConfig);
 
@@ -267,5 +282,14 @@ void printConfig(const Config& config)
 	int numBoxes = static_cast<int>(1.0 / config.granularityScale);
 	std::cout << "Number of initial boxes: ~" << numBoxes << std::endl;
 
+	std::cout << "Number of sample attempts: " << config.sampleTries << std::endl;
+
 	std::cout << "Number of printers: " << config.numPrinters << std::endl;
+
+	std::cout << "Flags:" << std::endl;
+	if(config.symmetrySkip)
+		std::cout << "Symmetry Skipping, ";
+	if(config.cleanupOutDirAfter)
+		std::cout << "Cleaning Output After.";
+	std::cout << std::endl;
 }

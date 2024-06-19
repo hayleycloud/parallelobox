@@ -203,13 +203,15 @@ void processSubMesh(
 	Mesh& mesh, 
 	std::vector<Mesh>& out)
 {
+	std::stringstream strstrm("");
+	strstrm << subIndex;
+	std::string parentDirectory = config.outputDir + "/" + strstrm.str();
+
 	recenter(mesh);
 
 	std::cout << "Sub-mesh re-centered." << std::endl;
 	
 	alignMeshToGrid(mesh);
-
-	//out.push_back(mesh);
 
 	K::Point_3 min, max;
 	bounds(mesh, min, max);
@@ -230,118 +232,123 @@ void processSubMesh(
 	mv::vector3<GridCell> gridCells;
     getSurfaceBoxes(mesh, grid, gridCells, config.numPrinters);
 
-	/*unsigned int mIndex = 0;
-	mv::forEach<GridCell>([&](GridCell& cell) {
-		if(cell.type == GridCell::ContentType::Boundary)
-		{
-			std::stringstream ss("");
-			ss << mIndex << ".stl";
-
-			CGAL::IO::write_STL("out/" + ss.str(), cell.mesh);
-
-			++mIndex;
-		}
-	}, gridCells);*/
-
-	//CGAL::IO::write_STL("out/mesh.stl", mesh);
-	
 	std::vector<double> itrScores;
 
 	std::vector<std::unique_ptr<MeshBox>> meshBoxes;
 	for(unsigned int i = config.numPrinters; i > 1; --i)
 	{
 		double score = 0.0;
+		std::vector<double> subitrScores;
+		std::vector<int> emptyCounts;
 
-		resetGridCells(gridCells);
-
-		std::vector<Cluster> clusters = getClusters(i, mesh);
-		clusters = filterVerifiedClusters(clusters, min, max);
-		meshBoxes = getSourceMeshBoxesFrom(clusters, grid, gridCells);
-
-		enumerateConflicts(meshBoxes, gridCells);
-
-		regionGrowth(config, mesh, meshBoxes, gridCells, grid);
-
-		//resolveConflicts(mesh, meshBoxes, gridCells, grid);
-
-		enumerateConflicts(meshBoxes, gridCells);
-
-		size_t conflicts = 0;
-		conflicts = mv::reduce<GridCell, size_t>([](size_t &acc, GridCell &cell) {
-			if (cell.type == GridCell::ContentType::Boundary && cell.parents.size() > 1)
-				++acc;
-		}, gridCells, conflicts);
-
-		std::vector<Cuboid> emptyRegions;
-		size_t numEmptyRegions = getDiscreteEmptyRegions(grid, gridCells, emptyRegions);
-
-		std::cout << numEmptyRegions << " empty regions." << std::endl;
-
-		if(numEmptyRegions > (config.numPrinters - meshBoxes.size()))
+		for(unsigned int j = 0; j < config.sampleTries; ++j)
 		{
-			std::cout << "\tInvalid!" << std::endl;
-			score = -1.0;
+			double subscore = 0.0;
+
+			resetGridCells(gridCells);
+
+			std::vector<Cluster> clusters = getClusters(i, mesh);
+			clusters = filterVerifiedClusters(clusters, min, max);
+			meshBoxes = getSourceMeshBoxesFrom(clusters, grid, gridCells);
+
+			enumerateConflicts(meshBoxes, gridCells);
+
+			regionGrowth(config, mesh, meshBoxes, gridCells, grid);
+
+			//resolveConflicts(mesh, meshBoxes, gridCells, grid);
+
+			enumerateConflicts(meshBoxes, gridCells);
+
+			size_t conflicts = 0;
+			conflicts = mv::reduce<GridCell, size_t>([](size_t &acc, GridCell &cell) {
+				if(cell.type == GridCell::ContentType::Boundary && cell.parents.size() > 1)
+					++acc;
+			}, gridCells, conflicts);
+
+			std::vector<Cuboid> emptyRegions;
+			size_t numEmptyRegions = getDiscreteEmptyRegions(grid, gridCells, emptyRegions);
+			emptyCounts.push_back(numEmptyRegions);
+			std::cout << numEmptyRegions << " empty regions." << std::endl;
+
+			if(numEmptyRegions > (config.numPrinters - meshBoxes.size()))
+			{
+				std::cout << "\tInvalid!" << std::endl;
+				subscore = -1.0;
+			}
+			else
+			{
+				std::cout << "\tSuccess!" << std::endl;
+			}
+
+			std::cout << "Final Conflict Count: " << conflicts << std::endl;
+
+			std::vector<const Mesh*> mbPtrs;
+			for(auto& mb: meshBoxes)
+				mbPtrs.push_back(&mb->mesh);
+
+			std::stringstream sis("");
+			sis << i << "-" << j;
+			std::string dirName = parentDirectory + "/itr" + sis.str();
+			fs::create_directory(dirName);
+			saveMeshes(dirName, mbPtrs);
+
+			if(subscore >= 0.0)
+				subscore = fullScore(config, mbPtrs);
+			subitrScores.push_back(subscore);
+
+			std::vector<MeshBox> emptyMeshBoxes;
+			for(const Cuboid& region: emptyRegions)
+			{
+				emptyMeshBoxes.emplace_back(MeshBox(region));
+				clipFromMesh(grid, mesh, emptyMeshBoxes.back());
+				std::cout << "\t" << region << std::endl;
+			}
+
+			std::vector<const Mesh*> embPtrs;
+			for(const MeshBox& mb: emptyMeshBoxes)
+				embPtrs.push_back(&mb.mesh);
+
+			std::string dirNameEmpties = dirName + "/empties";
+			fs::create_directory(dirNameEmpties);
+			saveMeshes(dirNameEmpties, embPtrs);
 		}
-		else
+
+		int bestIndex = -1;
+		int bestEmptyCount = std::numeric_limits<int>::max();
+		score = std::numeric_limits<int>::max();
+		for(int index = 0; index < config.sampleTries; ++index) 
 		{
-			std::cout << "\tSuccess!" << std::endl;
+			if(emptyCounts[index] < bestEmptyCount)
+			{
+				bestIndex = index;
+				bestEmptyCount = emptyCounts[index];
+				score = subitrScores[index];
+			}
+			else if(emptyCounts[index] == bestEmptyCount &&
+					subitrScores[index] < score)
+			{
+				bestIndex = index;
+				score = subitrScores[index];
+			}
 		}
 
-		std::cout << "Final Conflict Count: " << conflicts << std::endl;
+		std::stringstream sis2("");
+		sis2 << i << "-" << bestIndex;
+		std::string srcDirName = parentDirectory + "/itr" + sis2.str();
+		std::stringstream sis3("");
+		sis3 << i;
+		std::string targetDirName = parentDirectory + "/itr" + sis3.str();
+		fs::rename(srcDirName, targetDirName);
 
-		std::vector<const Mesh*> mbPtrs;
-		for(auto& mb: meshBoxes)
-			mbPtrs.push_back(&mb->mesh);
-
-		std::stringstream sis("");
-		sis << i;
-		std::string dirName = parentDirectory + "/itr" + sis.str();
-		fs::create_directory(dirName);
-		saveMeshes(dirName, mbPtrs);
-
-		std::vector<MeshBox> emptyMeshBoxes;
-		for(const Cuboid& region: emptyRegions)
+		for(int index = 0; index < config.sampleTries; ++index)
 		{
-			emptyMeshBoxes.emplace_back(MeshBox(region));
-			clipFromMesh(grid, mesh, emptyMeshBoxes.back());
-			std::cout << "\t" << region << std::endl;
+			std::stringstream ss("");
+			ss << index;
+			fs::remove_all(parentDirectory + "/itr" + ss.str());
 		}
 
-		std::vector<const Mesh*> embPtrs;
-		for(const MeshBox& mb: emptyMeshBoxes)
-			embPtrs.push_back(&mb.mesh);
-
-		std::string dirNameEmpties = dirName + "/empties";
-		fs::create_directory(dirNameEmpties);
-		saveMeshes(dirNameEmpties, embPtrs);
-
-		if(score >= 0.0)
-			score = fullScore(config, mbPtrs);
 		itrScores.push_back(score);
-
-		int b = 3;
-		std::cin >> b;
 	}
-
-	//size_t empties = 0;
-	//empties = mv::reduce<GridCell,size_t>([](size_t& acc, GridCell& cell) {
-	//	if(cell.type == GridCell::ContentType::Boundary && cell.parents.empty())
-	//		++acc;
-	//}, gridCells, empties);
-
-	//std::vector<const Mesh*> emptyCells;
-	//emptyCells = mv::reduce<GridCell,std::vector<const Mesh*>>(
-	//	[](std::vector<const Mesh*>& list, GridCell& cell) {
-	//		if(cell.type == GridCell::ContentType::Boundary && cell.parents.empty())
-	//		{
-	//			list.push_back(std::addressof(cell.mesh));
-	//		}
-	//}, gridCells, emptyCells);
-
-	//fs::create_directory(config.outputDir + "/empties");
-	//saveMeshes(config.outputDir + "/empties", emptyCells);
-
-	//std::cout << "Final Empty Boundary Cell Count: " << empties << std::endl;
 	
 	int itrIndex = 0, bestIndex = -1;
 	double bestScore = std::numeric_limits<double>::max();
@@ -437,26 +444,6 @@ int run(int argc, const char* argv[])
 
 		processSubMesh(config, index, subMeshes[index], subMeshSubDivs[index]);
 	}
-
-
-	size_t meshIndex = 0;
-	for(const auto& subMesh: subMeshSubDivs)
-	{
-		saveMeshes(config.outputDir, subMesh);
-	}
-
-	return EXIT_SUCCESS;
-
-	/*std::vector<Mesh> subdivs;
-	grid.clipVolume(inputMesh, subdivs);*/
-
-
-	//std::ofstream("out.off") << inputMesh;
-	//if(CGAL::IO::write_STL(config.outputDir + "/" + "left.stl", leftCube) &&
-	//   CGAL::IO::write_STL(config.outputDir + "/" + "right.stl", rightCube))
-	//	std::cout << "Mesh re-saved!" << std::endl;
-	//else
-	//	throw std::runtime_error("Could not save mesh!");
 
 	std::chrono::time_point<std::chrono::steady_clock> endIval =
 		std::chrono::steady_clock::now();
