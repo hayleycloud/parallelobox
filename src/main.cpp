@@ -16,6 +16,9 @@
 #include <fstream>
 #include <filesystem>
 
+#define EXPORT_ALL_TRIES	false
+#define EXPORT_EMPTIES		false
+
 namespace fs = std::filesystem;
 
 std::string toText(Direction direction)
@@ -296,6 +299,7 @@ void processSubMesh(
 				subscore = fullScore(config, mbPtrs);
 			subitrScores.push_back(subscore);
 
+#if EXPORT_EMPTIES == true
 			std::vector<MeshBox> emptyMeshBoxes;
 			for(const Cuboid& region: emptyRegions)
 			{
@@ -311,6 +315,7 @@ void processSubMesh(
 			std::string dirNameEmpties = dirName + "/empties";
 			fs::create_directory(dirNameEmpties);
 			saveMeshes(dirNameEmpties, embPtrs);
+#endif
 		}
 
 		int bestIndex = -1;
@@ -340,15 +345,19 @@ void processSubMesh(
 		std::string targetDirName = parentDirectory + "/itr" + sis3.str();
 		fs::rename(srcDirName, targetDirName);
 
+#if EXPORT_ALL_TRIES == false
 		for(int index = 0; index < config.sampleTries; ++index)
 		{
 			std::stringstream ss("");
-			ss << index;
+			ss << i << "-" << index;
 			fs::remove_all(parentDirectory + "/itr" + ss.str());
 		}
+#endif
 
 		itrScores.push_back(score);
 	}
+
+	std::cout << std::endl;
 	
 	int itrIndex = 0, bestIndex = -1;
 	double bestScore = std::numeric_limits<double>::max();

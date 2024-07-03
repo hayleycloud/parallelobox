@@ -9,7 +9,8 @@
 
 namespace fs = std::filesystem;
 
-#define USE_CLUSTERS    false
+#define EXPORT_INTERMEDIATES	false
+#define USE_CLUSTERS    		false
 
 //void addCellsToMeshBox(
 //	mv::vector3<GridCell>& gridCells, 
@@ -810,10 +811,12 @@ void regionGrowth(
 		++iterNum;
 	}
 
+#if EXPORT_INTERMEDIATES == true
 	std::stringstream ss("");
 	ss << config.outputDir << "/dir" << iterNum;
 	fs::create_directory(ss.str());
 
 	saveMeshes(ss.str(), sourceBoxes);
+#endif
 #endif
 }
