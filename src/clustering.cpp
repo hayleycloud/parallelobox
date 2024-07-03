@@ -152,11 +152,19 @@ bool compareClusterSets(
 	const std::vector<Cluster>& clusters1, 
 	const std::vector<Cluster>& clusters2)
 {
+	int numClusters1 = clusters1.size();
+	if(numClusters1 != clusters2.size())
+		return false;
+
 	// Mesh doesn't change ergo indices are guaranteed linear ordering
-	for(int i = 0; i < clusters1.size(); ++i)
+	for(int i = 0; i < numClusters1; ++i)
 	{
 		const Cluster& cluster1 = clusters1.at(i);
 		const Cluster& cluster2 = clusters2.at(i);
+
+		if(cluster1.vertices.size() != cluster2.vertices.size())
+			return false;
+
 		for(int j = 0; j < cluster1.vertices.size(); ++j)
 		{
 			if(cluster1.vertices.at(j) != cluster2.vertices.at(j))

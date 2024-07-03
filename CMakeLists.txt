@@ -15,9 +15,10 @@ find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(CGAL REQUIRED COMPONENTS Core)
 find_package(OpenMP)
 
-option(USE_DEBUG "Use debug mode" OFF)
+set(USE_DEBUG OFF CACHE BOOL "Use debug mode")
 
 if(USE_DEBUG)
+	message("Using debug mode")
 	add_definitions(-DDEBUG)
 endif()
 
