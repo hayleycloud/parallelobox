@@ -457,7 +457,9 @@ std::optional<Cuboid> extendRegionIn(
 	std::optional<Cuboid> newRegion = extendRegionIn(direction, region.dims, grid);
 	if(!newRegion)
 	{
+#ifdef VERBOSE
 		std::cout << "\t\tCannot grow " << toText(direction) << "." << std::endl;
+#endif
 		return 0.0;
 	}
 
@@ -473,7 +475,9 @@ std::optional<Cuboid> extendRegionIn(
 	//std::cout << numBoxesOld << " " << numBoxesNew << std::endl;
 	if(samples.empty())
 	{
+#ifdef VERBOSE
 		std::cout << "\t\tSampling " << toText(direction) << " is empty." << std::endl;
+#endif
 		return 0.0;
 	}
 
@@ -495,17 +499,23 @@ std::optional<Cuboid> extendRegionIn(
 
 	if(empty)
 	{
+#ifdef VERBOSE
 		std::cout << "\t\tCells " << toText(direction) << " are empty." << std::endl;
+#endif
 		return -1.0;
 	}
 	if(willOverlap)
 	{
+#ifdef VERBOSE
 		std::cout << "\t\tGrowth " << toText(direction) << " will overlap." << std::endl;
+#endif
 		return -1.0;
 	}
 	if(!anyUnassigned)
 	{
+#ifdef VERBOSE
 		std::cout << "\t\tAssigned cells " << toText(direction) << "." << std::endl;
+#endif
 		return -1.0;
 	}
 
@@ -554,10 +564,12 @@ std::optional<Cuboid> extendRegionIn(
 	// TODO: Also: overhang area should be penalised! So, negate?
 	
 	double score = std::abs(printCost + overhangCost) * proxScore;
+#ifdef VERBOSE
 	std::cout << "\t\tScore for " << toText(direction)
 			  << ":   \t" << score << " [Proximity: " << proxScore
 			  << ", Printing: " << printCost 
 			  << "]" << std::endl;
+#endif
 
 	return score;
 }
@@ -638,10 +650,14 @@ void recomputeAABBs(std::vector<std::unique_ptr<MeshBox>>& boxes)
 			if(child->position.z > max.z)
 				max.z = child->position.z;
 
+#ifdef VERBOSE
 			std::cout << child->position << " [Min: " << min << ", Max: " << max << "]" << std::endl;
+#endif
 		}
 		box->dims = Cuboid(min, (max - min) + Vector3D(1));
+#ifdef VERBOSE
 		std::cout << box->dims << std::endl;
+#endif
 	}
 }
 
@@ -667,9 +683,11 @@ bool growBoxIfPossible(
 	mv::vector3<GridCell>& gridCells,
 	Grid& grid)
 {
+#ifdef VERBOSE
 	std::cout << "\tComputing score for " << std::addressof(targetBox)
 	          << " " << targetBox.dims
 	          << ":" << std::endl;
+#endif
 
 	const std::array<Direction,6> directions = {
 		Direction::Left, Direction::Right,
@@ -691,14 +709,18 @@ bool growBoxIfPossible(
 	Direction bestDirection = getBestDirection(scores);
 	if(scores[bestDirection] > 0.0)
 	{
+#ifdef VERBOSE
 		std::cout << "\tBest Score: " << toText(bestDirection)
 		          << " = " << scores[bestDirection] << std::endl;
+#endif
 		grow(bestDirection, gridCells, targetBox);
 		return true;
 	}
 	else
 	{
+#ifdef VERBOSE
 		std::cout << "\tNo possible directions detected." << std::endl;
+#endif
 		return false;
 	}
 }
@@ -717,7 +739,9 @@ bool continueRegionGrowth(
 		}
 	}, gridCells, initial);
 
+#ifdef VERBOSE
 	std::cout << "Remaining blocks: " << remainingCells << std::endl;
+#endif
 
 	return remainingCells > 0;
 }
@@ -763,7 +787,9 @@ void regionGrowth(
 	unsigned int iterNum = 1;
 	while(continueRegionGrowth(sourceBoxes, gridCells))
 	{
+#ifdef VERBOSE
 		std::cout << "Region Growth Iteration " << iterNum << std::endl;
+#endif
 
 		typedef std::pair<MeshBox*,double> BoxScore;
 
@@ -797,7 +823,9 @@ void regionGrowth(
 
 		if(!onePassed)
 		{
+#ifdef VERBOSE
 			std::cout << "Algorithm has locked." << std::endl;
+#endif
 			return;
 		}
 

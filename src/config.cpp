@@ -261,6 +261,10 @@ void printConfig(const Config& config)
 	std::cout << "Config" << std::endl;
 	std::cout << "------------------------" << std::endl;
 
+#ifdef VERBOSE
+	std::cout << "Running with VERBOSE enabled." << std::endl;
+#endif
+
 	const PrinterSpec& printer = config.printer;
 	std::cout << "Printer specifications:" << std::endl;
 

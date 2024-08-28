@@ -182,10 +182,12 @@ std::vector<Cluster> getClusters(int k, const Mesh& mesh, bool useKMeansPP)
 		: getInitialCentroids(k, mesh);
 	assignVerticesToClusters(mesh, clusters);
 
+#ifdef VERBOSE
 	std::cout << "Initial cluster centroids ";
 	std::cout << '(' << (useKMeansPP ? "k-means++" : "random") << "):";
 	std::cout << std::endl;
 	printClusters(clusters);
+#endif
 
 	int itrNum = 1;
 	bool converged = false;
@@ -209,8 +211,10 @@ std::vector<Cluster> getClusters(int k, const Mesh& mesh, bool useKMeansPP)
 		++itrNum;
 	}
 
+#ifdef VERBOSE
 	std::cout << "k-Means Iteration " << itrNum+1 << std::endl;
 	printClusters(clusters);
+#endif
 
 	return clusters;
 }

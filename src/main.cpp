@@ -184,7 +184,11 @@ void saveMeshes(const std::string& directory, const std::vector<const Mesh*>& me
 		ss << meshIndex << ".stl";
 
 		if(CGAL::IO::write_STL(directory + "/" + ss.str(), *mesh))
+		{
+#ifdef VERBOSE
 			std::cout << "Saved " << ss.str() << std::endl;
+#endif
+		}
 		else
 			std::cerr << "Failed to write " << ss.str() << "!" << std::endl;
 
@@ -203,6 +207,7 @@ void saveMeshes(const std::string& directory, const std::vector<Mesh>& meshes)
 void processSubMesh(
 	const Config& config, 
 	int subIndex,
+	int numPrinters,
 	Mesh& mesh, 
 	std::vector<Mesh>& out)
 {
@@ -212,14 +217,18 @@ void processSubMesh(
 
 	recenter(mesh);
 
+#ifdef VERBOSE
 	std::cout << "Sub-mesh re-centered." << std::endl;
+#endif
 	
 	alignMeshToGrid(mesh);
 
 	K::Point_3 min, max;
 	bounds(mesh, min, max);
 
+#ifdef VERBOSE
 	std::cout << "Min: " << min << ", Max: " << max << std::endl;
+#endif
 
 	min = min - K::Vector_3(1.0, 1.0, 1.0);
 	max = max + K::Vector_3(1.0, 1.0, 1.0);
@@ -228,25 +237,32 @@ void processSubMesh(
 		"f:normals", CGAL::NULL_VECTOR).first;
 	PMP::compute_face_normals(mesh, fnormals);
 
+#ifdef VERBOSE
 	std::cout << "Computed normals." << std::endl;
+#endif
 
 	Grid grid(min, max, config.granularityScale);
 
 	mv::vector3<GridCell> gridCells;
-    getSurfaceBoxes(mesh, grid, gridCells, config.numPrinters);
+    getSurfaceBoxes(mesh, grid, gridCells, numPrinters);
 
 	std::vector<double> itrScores;
 
 	std::vector<std::unique_ptr<MeshBox>> meshBoxes;
-	for(unsigned int i = config.numPrinters; i > 1; --i)
+	for(unsigned int i = numPrinters; i > 1; --i)
 	{
 		double score = 0.0;
 		std::vector<double> subitrScores;
 		std::vector<int> emptyCounts;
 
+		std::cout << std::endl;
+		std::cout << "Running with " << i << " boxes..." << std::endl;
+
 		for(unsigned int j = 0; j < config.sampleTries; ++j)
 		{
 			double subscore = 0.0;
+
+			std::cout << "[Attempt " << j+1 << "...]" << std::endl;
 
 			resetGridCells(gridCells);
 
@@ -271,19 +287,27 @@ void processSubMesh(
 			std::vector<Cuboid> emptyRegions;
 			size_t numEmptyRegions = getDiscreteEmptyRegions(grid, gridCells, emptyRegions);
 			emptyCounts.push_back(numEmptyRegions);
+#ifdef VERBOSE
 			std::cout << numEmptyRegions << " empty regions." << std::endl;
+#endif
 
-			if(numEmptyRegions > (config.numPrinters - meshBoxes.size()))
+			if(numEmptyRegions > (numPrinters - meshBoxes.size()))
 			{
+#ifdef VERBOSE
 				std::cout << "\tInvalid!" << std::endl;
+#endif
 				subscore = -1.0;
 			}
 			else
 			{
+#ifdef VERBOSE
 				std::cout << "\tSuccess!" << std::endl;
+#endif
 			}
 
+#ifdef VERBOSE
 			std::cout << "Final Conflict Count: " << conflicts << std::endl;
+#endif
 
 			std::vector<const Mesh*> mbPtrs;
 			for(auto& mb: meshBoxes)
@@ -305,7 +329,9 @@ void processSubMesh(
 			{
 				emptyMeshBoxes.emplace_back(MeshBox(region));
 				clipFromMesh(grid, mesh, emptyMeshBoxes.back());
+#ifdef VERBOSE
 				std::cout << "\t" << region << std::endl;
+#endif
 			}
 
 			std::vector<const Mesh*> embPtrs;
@@ -357,14 +383,16 @@ void processSubMesh(
 		itrScores.push_back(score);
 	}
 
+#ifdef VERBOSE
 	std::cout << std::endl;
+#endif
 	
 	int itrIndex = 0, bestIndex = -1;
 	double bestScore = std::numeric_limits<double>::max();
-	int numPrinters = config.numPrinters, bestNumPrinters;
+	int subNumPrinters = numPrinters, bestNumPrinters;
 	for(double score: itrScores)
 	{
-		std::cout << "Iteration " << itrIndex+1 << ": " << numPrinters 
+		std::cout << "Iteration " << itrIndex+1 << ": " << subNumPrinters 
 			      << " printers => ";
 		if(score < 0.0)
 			std::cout << "Failed";
@@ -374,13 +402,13 @@ void processSubMesh(
 			{
 				bestScore = score;
 				bestIndex = itrIndex;
-				bestNumPrinters = numPrinters;
+				bestNumPrinters = subNumPrinters;
 			}
 			std::cout << "Success [score = " << score << "]!";
 		}
 		std::cout << std::endl;
 		itrIndex++;
-		numPrinters--;
+		subNumPrinters--;
 	}
 
 	std::cout << "Best Iteration: " << bestIndex+1;
@@ -443,6 +471,8 @@ int run(int argc, const char* argv[])
 	fs::remove_all(config.outputDir);
 	fs::create_directory(config.outputDir);
 
+	int numPrinters = config.numPrinters / subMeshSubDivs.size();
+
 	for(unsigned int index = 0; index < subMeshSubDivs.size(); ++index)
 	{
 		std::stringstream ss("");
@@ -451,7 +481,12 @@ int run(int argc, const char* argv[])
 		std::string dirName = config.outputDir + "/" + ss.str();
 		fs::create_directory(dirName);
 
-		processSubMesh(config, index, subMeshes[index], subMeshSubDivs[index]);
+		processSubMesh(
+			config, 
+			index, 
+			numPrinters, 
+			subMeshes[index], 
+			subMeshSubDivs[index]);
 	}
 
 	std::chrono::time_point<std::chrono::steady_clock> endIval =
