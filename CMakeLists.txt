@@ -35,7 +35,8 @@ add_executable(parallelobox
 	src/symmetry.cpp 
 	src/meshbox.cpp
 	src/regiongrowth.cpp
-	src/resolve.cpp)
+	src/resolve.cpp
+	src/fillempty.cpp)
 #   src/blockmerge.cpp)
 target_link_libraries(parallelobox Eigen3::Eigen CGAL::CGAL CGAL::CGAL_Core OpenMP::OpenMP_CXX)
 

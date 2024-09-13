@@ -347,6 +347,79 @@ std::optional<Cuboid> extendRegionIn(
 	return count;
 }
 
+[[nodiscard]] bool isVoid(const std::vector<GridCell*>& cells)
+{
+	bool hasNonVoids = false;
+	for(const GridCell* cell: cells)
+		hasNonVoids |= cell->type != GridCell::ContentType::Empty;
+
+	return hasNonVoids;
+}
+
+void enumerateUpDirections(
+	const MeshBox& box, 
+	const Grid& grid,
+	mv::vector3<GridCell>& gridCells,
+	std::vector<Direction>& upDirs)
+{
+	const Vector3D& btmLeftOut = box.dims.origin;
+	Vector3D topRightIn = box.dims.last();
+
+	if(btmLeftOut.x == 0)
+		upDirs.push_back(Direction::Left);
+	else
+	{
+		std::vector<GridCell*> cells = sampleExpand(Direction::Left, gridCells, box);
+		if(isVoid(cells))
+			upDirs.push_back(Direction::Left);
+	}
+
+	if(btmLeftOut.y == 0)
+		upDirs.push_back(Direction::Down);
+	else
+	{
+		std::vector<GridCell*> cells = sampleExpand(Direction::Down, gridCells, box);
+		if(isVoid(cells))
+			upDirs.push_back(Direction::Down);
+	}
+
+	if(btmLeftOut.z == 0)
+		upDirs.push_back(Direction::Out);
+	else
+	{
+		std::vector<GridCell*> cells = sampleExpand(Direction::Out, gridCells, box);
+		if(isVoid(cells))
+			upDirs.push_back(Direction::Out);
+	}
+
+	if(topRightIn.x == (grid.getNumBoxesX() - 1))
+		upDirs.push_back(Direction::Right);
+	else
+	{
+		std::vector<GridCell*> cells = sampleExpand(Direction::Right, gridCells, box);
+		if(isVoid(cells))
+			upDirs.push_back(Direction::Right);
+	}
+
+	if(topRightIn.y == (grid.getNumBoxesY() - 1))
+		upDirs.push_back(Direction::Up);
+	else
+	{
+		std::vector<GridCell*> cells = sampleExpand(Direction::Up, gridCells, box);
+		if(isVoid(cells))
+			upDirs.push_back(Direction::Up);
+	}
+
+	if(topRightIn.z == (grid.getNumBoxesZ() - 1))
+		upDirs.push_back(Direction::In);
+	else
+	{
+		std::vector<GridCell*> cells = sampleExpand(Direction::In, gridCells, box);
+		if(isVoid(cells))
+			upDirs.push_back(Direction::In);
+	}
+}
+
 [[nodiscard]] size_t l1n(const Vector3D& a, const Vector3D& b)
 {
 	return std::abs(b.x - a.x) + std::abs(b.y - a.y) + std::abs(b.z - a.z);
@@ -529,13 +602,16 @@ std::optional<Cuboid> extendRegionIn(
 	// Printability Constraint
 	///////////////////////////////////////////////////////////////////////////
 	
-	//std::cout << fitsVolume(config, newMeshBox.mesh) << std::endl;
-	/*if(!fitsVolume(config, newMeshBox.mesh))
+	std::vector<Direction> upVectors;
+	enumerateUpDirections(newMeshBox, grid, gridCells, upVectors);
+
+	if(!fitsVolume(config, upVectors, newMeshBox.mesh))
 	{
-		std::cout << "\tGrowth " << toText(direction) << " does not fit volume!" << std::endl;
-		return 0.0;
-	}*/
-	// @TODO: Volume constraints are necessary!
+#ifdef VERBOSE
+		std::cout << "\tGrowth " << toText(direction) << " does not fit volume" << std::endl;
+#endif
+		return -1.0;
+	}
 
 	// Penalisation of Proximity
 	///////////////////////////////////////////////////////////////////////////
@@ -848,3 +924,4 @@ void regionGrowth(
 #endif
 #endif
 }
+

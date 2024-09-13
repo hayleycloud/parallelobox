@@ -5,6 +5,8 @@
 
 void bounds(const Mesh& mesh, K::Point_3& min, K::Point_3& max);
 
+void boundsLocal(const Mesh& mesh, K::Point_3& min, K::Point_3& max);
+
 double overhangArea(
 	const Config& config, 
 	const Mesh& mesh, 

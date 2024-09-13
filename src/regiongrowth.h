@@ -11,3 +11,8 @@ void regionGrowth(
 	mv::vector3<GridCell>& gridCells,
 	Grid& grid);
 
+void sampleCells(
+	mv::vector3<GridCell>& gridCells, 
+	const Cuboid& cuboid,
+	std::vector<GridCell*>& samples);
+

@@ -151,7 +151,7 @@ void resetGridCells(mv::vector3<GridCell>& gridCells)
 	}, gridCells);
 }
 
-bool getNeighbouringEmptyCells(
+/*bool getNeighbouringEmptyCells(
 	const Vector3D& position,
 	const Grid& grid, 
 	const mv::vector3<GridCell>& gridCells,
@@ -175,7 +175,7 @@ bool getNeighbouringEmptyCells(
 		Vector3D newPos = position + direction;
 		if(newPos.x >= 0 && newPos.y >= 0 && newPos.z >= 0
 			&& newPos.x < grid.getNumBoxesX() && newPos.y < grid.getNumBoxesY() && newPos.z < grid.getNumBoxesZ())
-		getNeighbouringEmptyCells(newPos, grid, gridCells, emptyCells);
+			getNeighbouringEmptyCells(newPos, grid, gridCells, emptyCells);
 	}
 
 	return true;
@@ -229,7 +229,7 @@ int getDiscreteEmptyRegions(
 		emptyRegions.emplace_back(getDimsFrom(region));
 
 	return numRegions;
-}
+}*/
 
 void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child)
 {

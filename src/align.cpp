@@ -30,6 +30,35 @@ void bounds(const Mesh& mesh, K::Point_3& min, K::Point_3& max)
 	max = K::Point_3(maxX, maxY, maxZ);
 }
 
+void boundsLocal(const Mesh& mesh, K::Point_3& min, K::Point_3& max)
+{
+	Mesh::Vertex_index firstVertex = *(mesh.vertices().begin());
+	const K::Point_3& first = mesh.point(firstVertex);
+
+	double minX = first.x(), minY = first.y(), minZ = first.z();
+	double maxX = first.x(), maxY = first.y(), maxZ = first.z();
+
+	for(Mesh::Vertex_index vIndex: mesh.vertices())
+	{
+		const K::Point_3& p = mesh.point(vIndex);
+		if(p.x() < minX)
+			minX = p.x();
+		if(p.x() > maxX)
+			maxX = p.x();
+		if(p.y() < minY)
+			minY = p.y();
+		if(p.y() > maxY)
+			maxY = p.y();
+		if(p.z() < minZ)
+			minZ = p.z();
+		if(p.z() > maxZ)
+			maxZ = p.z();
+	}
+
+	min = K::Point_3(minX, minY, minZ);
+	max = K::Point_3(maxX, maxY, maxZ);
+}
+
 bool isFloor(
 	const Mesh& mesh, const face_descriptor& fd, const K::Vector_3& floor)
 {
