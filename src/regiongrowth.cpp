@@ -420,6 +420,56 @@ void enumerateUpDirections(
 	}
 }
 
+void getFloorVectorsFrom(
+	const Grid& grid,
+	const MeshBox& meshBox, 
+	const std::vector<Direction>& upDirections,
+	std::vector<K::Vector_3>& floors)
+{
+	const Cuboid& bb = meshBox.dims;
+	const Vector3D bbEnd = bb.last();
+
+	const K::Point_3 min = grid.get(bb.origin.x, bb.origin.y, bb.origin.z).min();
+	const K::Point_3 max = grid.get(bbEnd.x, bbEnd.y, bbEnd.z).max();
+
+	for(Direction direction: upDirections)
+	{
+		switch(direction)
+		{
+			case Direction::Left:
+			{
+				floors.push_back(K::Vector_3(max.x(), 0.0, 0.0));
+				break;
+			}
+			case Direction::Right:
+			{
+				floors.push_back(K::Vector_3(min.x(), 0.0, 0.0));
+				break;
+			}
+			case Direction::Up:
+			{
+				floors.push_back(K::Vector_3(0.0, min.y(), 0.0));
+				break;
+			}
+			case Direction::Down:
+			{
+				floors.push_back(K::Vector_3(0.0, max.y(), 0.0));
+				break;
+			}
+			case Direction::In:
+			{
+				floors.push_back(K::Vector_3(0.0, 0.0, min.z()));
+				break;
+			}
+			case Direction::Out:
+			{
+				floors.push_back(K::Vector_3(0.0, 0.0, max.z()));
+				break;
+			}
+		}
+	}
+}
+
 [[nodiscard]] size_t l1n(const Vector3D& a, const Vector3D& b)
 {
 	return std::abs(b.x - a.x) + std::abs(b.y - a.y) + std::abs(b.z - a.z);
@@ -605,7 +655,8 @@ void enumerateUpDirections(
 	std::vector<Direction> upVectors;
 	enumerateUpDirections(newMeshBox, grid, gridCells, upVectors);
 
-	if(!fitsVolume(config, upVectors, newMeshBox.mesh))
+	std::vector<Direction> allowedUpDirs;
+	if(!fitsVolume(config, upVectors, newMeshBox.mesh, allowedUpDirs))
 	{
 #ifdef VERBOSE
 		std::cout << "\tGrowth " << toText(direction) << " does not fit volume" << std::endl;
@@ -630,16 +681,35 @@ void enumerateUpDirections(
 			proxScore = score;
 	}
 
-	// Application of Standard Objective
-	// (Penalisation of Overhang, Incentivisation of Size)
+	// Calculate best orientation overhang
+	///////////////////////////////////////////////////////////////////////////
+
+	auto fnormals = newMeshBox.mesh.add_property_map<face_descriptor, K::Vector_3>(
+		"f:normals", CGAL::NULL_VECTOR).first;
+	PMP::compute_face_normals(newMeshBox.mesh, fnormals);
+	
+	std::vector<K::Vector_3> floors;
+	getFloorVectorsFrom(grid, newMeshBox, allowedUpDirs, floors);
+
+	double bestOverhangCost = std::numeric_limits<double>::max();
+	for(const K::Vector_3& floor: floors)
+	{
+		double cost = overhangCost(config, newMeshBox.mesh, fnormals, floor);
+		if(cost < 0.0)
+		{
+			std::cerr << "OOPS?" << std::endl;
+		}
+
+		if(cost < bestOverhangCost)
+			bestOverhangCost = cost;
+	}
+
+	// Application of standard objective
 	///////////////////////////////////////////////////////////////////////////
 
 	double printCost = printingCost(config, newMeshBox.mesh);
-	double overhangCost = /*overhangCost()*/ 0.0;
-	// TODO: What the fuck is with our overhang function parameters?!??!
-	// TODO: Also: overhang area should be penalised! So, negate?
 	
-	double score = std::abs(printCost + overhangCost) * proxScore;
+	double score = std::abs(printCost + bestOverhangCost) * proxScore;
 #ifdef VERBOSE
 	std::cout << "\t\tScore for " << toText(direction)
 			  << ":   \t" << score << " [Proximity: " << proxScore

@@ -10,13 +10,16 @@ int calcMinNumPrinters(const Config& config, const Mesh& mesh)
 		config.printer.volume.height * 
 		config.printer.volume.depth;
 
+	std::cout << "MVol: " << meshVolume << std::endl;
+	std::cout << "PVol: " << printerVolume << std::endl;
+
 	return static_cast<int>(meshVolume / printerVolume);
 }
 
 double overhangCost(
-	const Config& config, 
-	const Mesh& mesh, 
-	const auto& fnormals,
+	const Config& config,
+	const Mesh& mesh,
+	const MeshNormalsMap& fnormals,
 	const K::Vector_3& floor)
 {
 	return overhangArea(config, mesh, fnormals, floor);
@@ -48,7 +51,10 @@ bool fitsVolume(
 }
 
 bool fitsVolume(
-	const Config& config, const std::vector<Direction>& up, const Mesh& mesh)
+	const Config& config, 
+	const std::vector<Direction>& upDirs, 
+	const Mesh& mesh,
+	std::vector<Direction>& allowedUpDirs)
 {
 	K::Point_3 min, max;
 	boundsLocal(mesh, min, max);
@@ -65,7 +71,7 @@ bool fitsVolume(
 	//std::cout << " | " << allowedWidth << ", " << allowedHeight << ", " << allowedDepth;
 	//std::cout << std::endl;
 
-	for(Direction direction: up)
+	for(Direction direction: upDirs)
 	{
 		switch(direction)
 		{
@@ -75,7 +81,11 @@ bool fitsVolume(
 				if(fitsVolume(
 					height, width, depth, 
 					allowedWidth, allowedHeight, allowedDepth))
+				{
+					allowedUpDirs.push_back(Direction::Left);
+					allowedUpDirs.push_back(Direction::Right);
 					return true;
+				}
 			}
 			break;
 			case Direction::Up:
@@ -84,7 +94,11 @@ bool fitsVolume(
 				if(fitsVolume(
 					width, height, depth, 
 					allowedWidth, allowedHeight, allowedDepth))
+				{
+					allowedUpDirs.push_back(Direction::Up);
+					allowedUpDirs.push_back(Direction::Down);
 					return true;
+				}
 			}
 			break;
 			case Direction::In:
@@ -93,7 +107,11 @@ bool fitsVolume(
 				if(fitsVolume(
 					width, depth, height, 
 					allowedWidth, allowedHeight, allowedDepth))
+				{
+					allowedUpDirs.push_back(Direction::In);
+					allowedUpDirs.push_back(Direction::Out);
 					return true;
+				}
 			}
 			break;
 		}
