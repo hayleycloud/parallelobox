@@ -30,7 +30,7 @@ void getSurfaceBoxes(
 
 	gridCells.resize(grid.getNumBoxesZ());
 	
-	#pragma omp parallel for default(none) shared(mesh, grid, gridCells, inside)
+	#pragma omp parallel for default(none) shared(gridCells, grid, inside) firstprivate(mesh)
 	for(int z = 0; z < grid.getNumBoxesZ(); ++z)
 	{
 		gridCells[z].resize(grid.getNumBoxesY());
