@@ -68,3 +68,4 @@ struct Cuboid
 	friend std::ostream& operator<<(std::ostream& strm, const Cuboid& cuboid);
 };
 
+ 

@@ -22,3 +22,4 @@ void findSymmetries(const Mesh& mesh, std::vector<HardPlane>* planes);
 
 bool symmetrySplit(const Mesh& mesh, Mesh* outLeft, Mesh* outRight);
 
+ 

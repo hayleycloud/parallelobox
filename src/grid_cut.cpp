@@ -118,3 +118,4 @@ void Grid::clip(Mesh& mesh, size_t x, size_t y, size_t z, bool fill) const
 	PMP::clip(mesh, bbox, CGAL::parameters::clip_volume(fill));
 }
 
+ 

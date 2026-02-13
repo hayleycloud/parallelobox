@@ -325,3 +325,4 @@ bool symmetrySplit(const Mesh& mesh, Mesh* outLeft, Mesh* outRight)
 	return true;
 }
 
+ 

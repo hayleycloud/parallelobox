@@ -219,3 +219,4 @@ std::vector<Cluster> getClusters(int k, const Mesh& mesh, bool useKMeansPP)
 	return clusters;
 }
 
+ 

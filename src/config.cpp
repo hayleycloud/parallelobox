@@ -297,3 +297,4 @@ void printConfig(const Config& config)
 		std::cout << "Cleaning Output After.";
 	std::cout << std::endl;
 }
+ 

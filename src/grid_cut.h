@@ -55,3 +55,4 @@ private:
 	void clip(Mesh& mesh, size_t x, size_t y, size_t z, bool fill) const;
 };
 
+ 

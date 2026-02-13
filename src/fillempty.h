@@ -10,3 +10,4 @@ bool getDiscreteEmptyRegions(
 	mv::vector3<GridCell>& gridCells,
 	int numAvailablePrinters,
 	std::vector<Cuboid>& emptyRegions);
+ 

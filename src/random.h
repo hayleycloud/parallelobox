@@ -33,3 +33,4 @@ template<class T> T fetchRandom(RNGInt<T> rng)
 {
 	return rng(randEng);
 }
+ 
