@@ -4,7 +4,7 @@
 
 void bounds(const Mesh& mesh, K::Point_3& min, K::Point_3& max)
 {
-	constexpr double minDbl = std::numeric_limits<double>::min();
+	constexpr double minDbl = -std::numeric_limits<double>::max();
 	constexpr double maxDbl = std::numeric_limits<double>::max();
 	double minX = maxDbl, minY = maxDbl, minZ = maxDbl;
 	double maxX = minDbl, maxY = minDbl, maxZ = minDbl;
