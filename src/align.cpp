@@ -64,6 +64,8 @@ bool isFloor(
 {
 	constexpr double eps = 0.0001;
 
+	// TODO: *All* vertices must be on floor for face to be floor
+
 	for(Mesh::Vertex_index vIndex: CGAL::vertices_around_face(
 		mesh.halfedge(fd), mesh))
 	{
@@ -84,6 +86,7 @@ double overhangArea(
 	const Config& config, 
 	const Mesh& mesh, 
 	const MeshNormalsMap& fnormals,
+	const K::Vector_3& up,
 	const K::Vector_3& floor)
 {
 	// TODO: Optimisations can be done here! Everything's in degrees, and the 
@@ -91,22 +94,37 @@ double overhangArea(
 	const double maxOverhang = 90.0 + config.printer.overhangTolerance;
 
 	double overhangSurfaceArea = 0.0;
-	K::Vector_3 up(0.0, 1.0, 0.0);
 
 	for(face_descriptor fd: faces(mesh))
 	{
 		auto n = fnormals[fd];
-		double cos_a = acos(n * up) * r;
+		double dot = n * up;
+		double cos_a = acos(dot) * r;
+#ifdef XVERBOSE
+		std::cout << up << " | " << n << " = " << cos_a;
+#endif
 		if(cos_a >= maxOverhang)
 		{
-			if(isFloor(mesh, fd, floor)) {}
-				//std::cout << "Floor ";
+			if(isFloor(mesh, fd, floor)) {
+#ifdef XVERBOSE
+				std::cout << " [Floor]";
+#endif
+			}
 			else
 			{
-				overhangSurfaceArea += PMP::face_area(fd, mesh);
-				//std::cout << "Overhang ";
+				// TODO: Scale by distance to floor
+				double farea = PMP::face_area(fd, mesh);
+				double projArea = farea * std::abs(dot);
+				overhangSurfaceArea += projArea;
+#ifdef XVERBOSE
+				std::cout << " [Overhang = " << farea << " | " << projArea << "]";
+#endif
 			}
 		}
+
+#ifdef XVERBOSE
+		std::cout << std::endl;
+#endif
 
 		//std::cout << n << " (" << cos_a << ")" << std::endl;
 	}

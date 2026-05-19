@@ -308,11 +308,22 @@ bool calcDiscreteRegions(
 #endif
 	}
 
+	bool success = true;
+	mv::forEachIndexed<GridCell>([&](const GridCell& cell, int x, int y, int z) {
+		if(cell.type == GridCell::ContentType::Boundary && cell.parents.empty())
+		{
+			if(!allEmptyCells.contains(std::addressof(cell)))
+				success = false;
+			
+		}
+	}, gridCells);
+
 #ifdef VERBOSE
-	std::cout << "failed - too many!" << std::endl;
+	if(!success)
+		std::cout << "failed - too many!" << std::endl;
 #endif
 
-	return false;
+	return success;
 }
 
 bool getDiscreteEmptyRegions(

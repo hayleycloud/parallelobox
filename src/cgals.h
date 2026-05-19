@@ -35,4 +35,6 @@ enum class Direction {
 std::string toText(Direction direction);
 
 std::string toTextSide(Direction direction);
+
+K::Vector_3 toVector(Direction direction);
  

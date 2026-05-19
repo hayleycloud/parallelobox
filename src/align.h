@@ -11,6 +11,7 @@ double overhangArea(
 	const Config& config, 
 	const Mesh& mesh, 
 	const MeshNormalsMap& fnormals,
+	const K::Vector_3& up,
 	const K::Vector_3& floor);
 
 void recenter(Mesh& mesh);

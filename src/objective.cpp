@@ -20,15 +20,16 @@ double overhangCost(
 	const Config& config,
 	const Mesh& mesh,
 	const MeshNormalsMap& fnormals,
+	const K::Vector_3& up,
 	const K::Vector_3& floor)
 {
-	return overhangArea(config, mesh, fnormals, floor);
+	return overhangArea(config, mesh, fnormals, up, floor);
 }
 
 double printingCost(const Config& config, const Mesh& mesh)
 {
-	const double volumeCost = config.printer.infillSpeed * PMP::volume(mesh);
-	const double surfaceCost = config.printer.shellSpeed * PMP::area(mesh);
+	const double volumeCost = PMP::volume(mesh) / config.printer.infillSpeed; 
+	const double surfaceCost = PMP::area(mesh) / config.printer.shellSpeed;
 	// TODO: squared_face_area for improved performance?
 	//DEBUG_EXEC(std::cout << "V: " << volumeCost << ", SA: " << surfaceCost << " = " << volumeCost + surfaceCost << std::endl);
 	return volumeCost + surfaceCost;
@@ -50,11 +51,7 @@ bool fitsVolume(
 	return false;
 }
 
-bool fitsVolume(
-	const Config& config, 
-	const std::vector<Direction>& upDirs, 
-	const Mesh& mesh,
-	std::vector<Direction>& allowedUpDirs)
+std::vector<Direction> calcOrientationsThatFit(const Config& config, const Mesh& mesh)
 {
 	K::Point_3 min, max;
 	boundsLocal(mesh, min, max);
@@ -66,58 +63,39 @@ bool fitsVolume(
 	const double allowedWidth = config.printer.volume.width;
 	const double allowedHeight = config.printer.volume.height;
 	const double allowedDepth = config.printer.volume.depth;
+	
+	std::vector<Direction> allowedUpDirs;
 
-	//std::cout << "FV: " << width << ", " << height << ", " << depth;
-	//std::cout << " | " << allowedWidth << ", " << allowedHeight << ", " << allowedDepth;
-	//std::cout << std::endl;
-
-	for(Direction direction: upDirs)
+	if(fitsVolume(
+		height, width, depth, 
+		allowedWidth, allowedHeight, allowedDepth))
 	{
-		switch(direction)
-		{
-			case Direction::Left:
-			case Direction::Right:
-			{
-				if(fitsVolume(
-					height, width, depth, 
-					allowedWidth, allowedHeight, allowedDepth))
-				{
-					allowedUpDirs.push_back(Direction::Left);
-					allowedUpDirs.push_back(Direction::Right);
-					return true;
-				}
-			}
-			break;
-			case Direction::Up:
-			case Direction::Down:
-			{
-				if(fitsVolume(
-					width, height, depth, 
-					allowedWidth, allowedHeight, allowedDepth))
-				{
-					allowedUpDirs.push_back(Direction::Up);
-					allowedUpDirs.push_back(Direction::Down);
-					return true;
-				}
-			}
-			break;
-			case Direction::In:
-			case Direction::Out:
-			{
-				if(fitsVolume(
-					width, depth, height, 
-					allowedWidth, allowedHeight, allowedDepth))
-				{
-					allowedUpDirs.push_back(Direction::In);
-					allowedUpDirs.push_back(Direction::Out);
-					return true;
-				}
-			}
-			break;
-		}
+		allowedUpDirs.push_back(Direction::Left);
+		allowedUpDirs.push_back(Direction::Right);
 	}
 
-	return false;
+	if(fitsVolume(
+		width, height, depth, 
+		allowedWidth, allowedHeight, allowedDepth))
+	{
+		allowedUpDirs.push_back(Direction::Up);
+		allowedUpDirs.push_back(Direction::Down);
+	}
+
+	if(fitsVolume(
+		width, depth, height, 
+		allowedWidth, allowedHeight, allowedDepth))
+	{
+		allowedUpDirs.push_back(Direction::In);
+		allowedUpDirs.push_back(Direction::Out);
+	}
+
+	return allowedUpDirs;
+}
+
+bool fitsVolume(const Config& config, const Mesh& mesh)
+{
+	return !calcOrientationsThatFit(config, mesh).empty();
 }
 
 /*double fitness(const Config& config, const Mesh& mesh)
@@ -130,6 +108,58 @@ bool fitsVolume(
 
 	return printCost + fitVolumeCost;
 }*/
+
+double printingCost(const Config& config, const Grid& grid, const MeshBox& meshBox)
+{
+	std::vector<Direction> allowedUpDirs = 
+		calcOrientationsThatFit(config, meshBox.mesh);
+
+	double simplePrintingCost = printingCost(config, meshBox.mesh);
+
+	// Calculate best orientation overhang
+	///////////////////////////////////////////////////////////////////////////
+
+	auto nmap = meshBox.mesh.property_map<face_descriptor,K::Vector_3>("f:normals");
+	auto fnormals = *nmap;
+	
+	// Determine the floors of the orientations that fit the printer
+	std::vector<K::Vector_3> floors;
+	getFloorVectorsFrom(grid, meshBox, allowedUpDirs, floors);
+
+	double bestOverhangCost = std::numeric_limits<double>::max();
+	for(size_t floorIndex = 0; floorIndex < floors.size(); ++floorIndex)
+	{
+		K::Vector_3 up = toVector(allowedUpDirs[floorIndex]);
+		double cost = overhangCost(
+			config, meshBox.mesh, fnormals, up, floors[floorIndex]);
+#ifdef XVERBOSE
+		std::cout << "\tOverhang Oriented " << toText(allowedUpDirs[floorIndex])
+			<< ": " << cost << std::endl;
+#endif
+		if(cost < 0.0)
+		{
+			std::cerr << "OOPS?" << std::endl;
+		}
+
+		if(cost < bestOverhangCost)
+			bestOverhangCost = cost;
+	}
+
+	/*int x;
+	if(rand() % 100 == 0)
+	{
+		K::Point_3 min, max;
+		bounds(meshBox.mesh, min, max);
+		std::cout << "Min: " << min << ", Max: " << max << " = " << max - min << std::endl;
+	const double volumeCost = PMP::volume(meshBox.mesh) / config.printer.infillSpeed; 
+	const double surfaceCost = PMP::area(meshBox.mesh) / config.printer.shellSpeed;
+		std::cout << "V: " << volumeCost << ", SA: " << surfaceCost << " = " << volumeCost + surfaceCost << std::endl;
+		CGAL::IO::write_STL("dfgh.stl", meshBox.mesh);
+		std::cin >> x;
+	}*/
+
+	return std::abs(simplePrintingCost + bestOverhangCost);
+}
 
 double fullScore(const Config& config, const std::vector<const Mesh*>& printers)
 {

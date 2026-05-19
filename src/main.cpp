@@ -17,7 +17,7 @@
 #include <fstream>
 #include <filesystem>
 
-#define EXPORT_ALL_TRIES	false
+#define EXPORT_ALL_TRIES	true
 #define EXPORT_EMPTIES		false
 
 namespace fs = std::filesystem;
@@ -62,6 +62,27 @@ std::string toTextSide(Direction direction)
 	}
 
 	return "";
+}
+
+K::Vector_3 toVector(Direction direction)
+{
+	switch(direction)
+	{
+		case Direction::Left:
+			return { -1, 0, 0 };
+		case Direction::Right:                                          
+			return { 1, 0, 0 };
+		case Direction::Down:
+			return { 0, -1, 0 };
+		case Direction::Up:
+			return { 0, 1, 0 };
+		case Direction::Out:
+			return { 0, 0, -1 };
+		case Direction::In:
+			return { 0, 0, 1 };
+	}
+
+	return { 0, 0, 0 };
 }
 
 GridCell* getNearestBoundaryTo(
@@ -304,19 +325,7 @@ void processSubMesh(
 			std::vector<std::unique_ptr<MeshBox>> meshBoxes;
 			meshBoxes = getSourceMeshBoxesFrom(clusters, grid, gridCells);
 
-			//enumerateConflicts(meshBoxes, gridCells);
-
 			regionGrowth(config, mesh, meshBoxes, gridCells, grid);
-
-			//resolveConflicts(mesh, meshBoxes, gridCells, grid);
-
-			/*enumerateConflicts(meshBoxes, gridCells);
-
-			size_t conflicts = 0;
-			conflicts = mv::reduce<GridCell, size_t>([](size_t &acc, GridCell &cell) {
-				if(cell.type == GridCell::ContentType::Boundary && cell.parents.size() > 1)
-					++acc;
-			}, gridCells, conflicts);*/
 
 			int freePrinters = numPrinters - meshBoxes.size();
 
@@ -406,6 +415,7 @@ void processSubMesh(
 			sis3 << i;
 			std::string targetDirName = parentDirectory + "/itr" + sis3.str();
 			fs::rename(srcDirName, targetDirName);
+			std::cout << "Good things" << std::endl;
 		}
 
 #if EXPORT_ALL_TRIES == false

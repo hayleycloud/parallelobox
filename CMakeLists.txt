@@ -11,9 +11,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 #set(CMAKE_CXX_FLAGS_DEBUG "-g -O3")
 
 # Dependencies
-find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+find_package(Eigen3 5.0 REQUIRED NO_MODULE)
 find_package(CGAL REQUIRED COMPONENTS Core)
 find_package(OpenMP)
+
+set(USE_VERBOSE OFF CACHE BOOL "Enable verbose output")
+
+if(USE_VERBOSE)
+	message("Using verbose mode")
+	add_definitions(-DVERBOSE)
+endif()
 
 set(USE_DEBUG OFF CACHE BOOL "Use debug mode")
 

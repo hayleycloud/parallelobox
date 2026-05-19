@@ -151,6 +151,56 @@ void resetGridCells(mv::vector3<GridCell>& gridCells)
 	}, gridCells);
 }
 
+void getFloorVectorsFrom(
+	const Grid& grid,
+	const MeshBox& meshBox, 
+	const std::vector<Direction>& upDirections,
+	std::vector<K::Vector_3>& floors)
+{
+	const Cuboid& bb = meshBox.dims;
+	const Vector3D bbEnd = bb.last();
+
+	const K::Point_3 min = grid.get(bb.origin.x, bb.origin.y, bb.origin.z).min();
+	const K::Point_3 max = grid.get(bbEnd.x, bbEnd.y, bbEnd.z).max();
+
+	for(Direction direction: upDirections)
+	{
+		switch(direction)
+		{
+			case Direction::Left:
+			{
+				floors.push_back(K::Vector_3(max.x(), 0.0, 0.0));
+				break;
+			}
+			case Direction::Right:
+			{
+				floors.push_back(K::Vector_3(min.x(), 0.0, 0.0));
+				break;
+			}
+			case Direction::Up:
+			{
+				floors.push_back(K::Vector_3(0.0, min.y(), 0.0));
+				break;
+			}
+			case Direction::Down:
+			{
+				floors.push_back(K::Vector_3(0.0, max.y(), 0.0));
+				break;
+			}
+			case Direction::In:
+			{
+				floors.push_back(K::Vector_3(0.0, 0.0, min.z()));
+				break;
+			}
+			case Direction::Out:
+			{
+				floors.push_back(K::Vector_3(0.0, 0.0, max.z()));
+				break;
+			}
+		}
+	}
+}
+
 /*bool getNeighbouringEmptyCells(
 	const Vector3D& position,
 	const Grid& grid, 
@@ -251,6 +301,10 @@ void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child)
 
 	child.mesh = mesh;
 	PMP::clip(child.mesh, bbox, CGAL::parameters::clip_volume(true));
+
+	auto fnormals = child.mesh.add_property_map<face_descriptor, K::Vector_3>(
+		"f:normals", CGAL::NULL_VECTOR).first;
+	PMP::compute_face_normals(child.mesh, fnormals);
 }
 
 /*void getUniqueMeshBoxes(

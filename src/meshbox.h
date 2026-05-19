@@ -61,6 +61,12 @@ void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child);
 
 void resetGridCells(mv::vector3<GridCell>& gridCells);
 
+void getFloorVectorsFrom(
+	const Grid& grid,
+	const MeshBox& meshBox, 
+	const std::vector<Direction>& upDirections,
+	std::vector<K::Vector_3>& floors);
+
 /*void getUniqueMeshBoxes(
 	mv::vector3<GridCell>& gridCells, 
 	std::vector<MeshBox*>& meshBoxes,

@@ -12,32 +12,6 @@ namespace fs = std::filesystem;
 #define EXPORT_INTERMEDIATES	false
 #define USE_CLUSTERS    		false
 
-//void addCellsToMeshBox(
-//	mv::vector3<GridCell>& gridCells, 
-//	MeshBox& box,
-//	const Vector3D& a, const Vector3D& b) 
-//{
-//	//std::cout << "Hello? " << a << " " << b << std::endl;
-//	MeshBox* boxPtr = std::addressof(box);
-//    for(int x = a.x; x <= b.x; ++x) 
-//	{
-//        for(int y = a.y; y <= b.y; ++y) 
-//		{
-//            for(int z = a.z; z <= b.z; ++z) 
-//			{
-//				GridCell* cell = std::addressof(mv::get(gridCells, x, y, z));
-//
-//				assert(cell);
-//				assert(std::find(cell->parents.cbegin(), cell->parents.cend(), boxPtr)
-//					== cell->parents.cend());
-//
-//				box.children.push_back(cell);
-//				cell->parents.push_back(boxPtr);
-//            }
-//        }
-//    }
-//}
-
 void printMeshBoxes(const std::vector<std::unique_ptr<MeshBox>>& meshboxes)
 {
 	int index = 1;
@@ -248,12 +222,6 @@ void grow(Direction direction, mv::vector3<GridCell>& gridCells, MeshBox& box)
 	}
 }
 
-void resetMeshBoxChildren(MeshBox& meshBox)
-{
-	GridCell* origin = meshBox.children.front();
-	meshBox.children.clear();
-}
-
 void sampleCells(
 	mv::vector3<GridCell>& gridCells, 
 	const Cuboid& cuboid,
@@ -336,6 +304,76 @@ std::optional<Cuboid> extendRegionIn(
 	return cuboid;
 }
 
+inline void seReportError(Direction direction, const std::string& msg)
+{
+	std::cout << "\t\tCannot grow " << toText(direction) << ": " << msg << std::endl;
+}
+
+std::optional<Cuboid> safeExpand(
+	Direction direction,
+	const Cuboid& region,
+	const Grid& grid,
+	mv::vector3<GridCell>& gridCells)
+{
+	std::optional<Cuboid> newRegion = extendRegionIn(direction, region, grid);
+	if(!newRegion)
+	{
+#ifdef VERBOSE
+		seReportError(direction, "Out Of Grid.");
+#endif
+		return std::nullopt;
+	}
+
+	std::vector<GridCell*> newCells = sampleExpand(direction, gridCells, region);
+	if(newCells.empty())
+	{
+#ifdef VERBOSE
+		seReportError(direction, "Into Void.");
+#endif
+		return std::nullopt;
+	}
+
+	bool anyBoundaries = false;
+	bool anyUnassigned = false;
+	bool willOverlap = false;
+	for(GridCell* cell: newCells)
+	{
+		if(cell->type == GridCell::ContentType::Boundary)
+		{
+			anyBoundaries = true;
+			if(cell->parents.empty())
+				anyUnassigned = true;
+		}
+
+		if(!cell->parents.empty())
+			willOverlap = true;
+	}
+
+	if(!anyBoundaries)
+	{
+#ifdef VERBOSE
+		seReportError(direction, "No Boundary Cells.");
+#endif
+		return std::nullopt;
+	}
+	if(willOverlap)
+	{
+#ifdef VERBOSE
+		seReportError(direction, "Overlap Not Allowed.");
+#endif
+		return std::nullopt;
+	}
+	if(!anyUnassigned)
+	{
+#ifdef VERBOSE
+		seReportError(direction, "Assigned Cells Detected!");
+#endif
+		return std::nullopt;
+	}
+
+	return newRegion;
+}
+
 [[nodiscard]] size_t enumerateBoundaries(const std::vector<GridCell*>& gridCells)
 {
 	size_t count = 0;
@@ -345,129 +383,6 @@ std::optional<Cuboid> extendRegionIn(
 			++count;
 	}
 	return count;
-}
-
-[[nodiscard]] bool isVoid(const std::vector<GridCell*>& cells)
-{
-	bool hasNonVoids = false;
-	for(const GridCell* cell: cells)
-		hasNonVoids |= cell->type != GridCell::ContentType::Empty;
-
-	return hasNonVoids;
-}
-
-void enumerateUpDirections(
-	const MeshBox& box, 
-	const Grid& grid,
-	mv::vector3<GridCell>& gridCells,
-	std::vector<Direction>& upDirs)
-{
-	const Vector3D& btmLeftOut = box.dims.origin;
-	Vector3D topRightIn = box.dims.last();
-
-	if(btmLeftOut.x == 0)
-		upDirs.push_back(Direction::Left);
-	else
-	{
-		std::vector<GridCell*> cells = sampleExpand(Direction::Left, gridCells, box);
-		if(isVoid(cells))
-			upDirs.push_back(Direction::Left);
-	}
-
-	if(btmLeftOut.y == 0)
-		upDirs.push_back(Direction::Down);
-	else
-	{
-		std::vector<GridCell*> cells = sampleExpand(Direction::Down, gridCells, box);
-		if(isVoid(cells))
-			upDirs.push_back(Direction::Down);
-	}
-
-	if(btmLeftOut.z == 0)
-		upDirs.push_back(Direction::Out);
-	else
-	{
-		std::vector<GridCell*> cells = sampleExpand(Direction::Out, gridCells, box);
-		if(isVoid(cells))
-			upDirs.push_back(Direction::Out);
-	}
-
-	if(topRightIn.x == (grid.getNumBoxesX() - 1))
-		upDirs.push_back(Direction::Right);
-	else
-	{
-		std::vector<GridCell*> cells = sampleExpand(Direction::Right, gridCells, box);
-		if(isVoid(cells))
-			upDirs.push_back(Direction::Right);
-	}
-
-	if(topRightIn.y == (grid.getNumBoxesY() - 1))
-		upDirs.push_back(Direction::Up);
-	else
-	{
-		std::vector<GridCell*> cells = sampleExpand(Direction::Up, gridCells, box);
-		if(isVoid(cells))
-			upDirs.push_back(Direction::Up);
-	}
-
-	if(topRightIn.z == (grid.getNumBoxesZ() - 1))
-		upDirs.push_back(Direction::In);
-	else
-	{
-		std::vector<GridCell*> cells = sampleExpand(Direction::In, gridCells, box);
-		if(isVoid(cells))
-			upDirs.push_back(Direction::In);
-	}
-}
-
-void getFloorVectorsFrom(
-	const Grid& grid,
-	const MeshBox& meshBox, 
-	const std::vector<Direction>& upDirections,
-	std::vector<K::Vector_3>& floors)
-{
-	const Cuboid& bb = meshBox.dims;
-	const Vector3D bbEnd = bb.last();
-
-	const K::Point_3 min = grid.get(bb.origin.x, bb.origin.y, bb.origin.z).min();
-	const K::Point_3 max = grid.get(bbEnd.x, bbEnd.y, bbEnd.z).max();
-
-	for(Direction direction: upDirections)
-	{
-		switch(direction)
-		{
-			case Direction::Left:
-			{
-				floors.push_back(K::Vector_3(max.x(), 0.0, 0.0));
-				break;
-			}
-			case Direction::Right:
-			{
-				floors.push_back(K::Vector_3(min.x(), 0.0, 0.0));
-				break;
-			}
-			case Direction::Up:
-			{
-				floors.push_back(K::Vector_3(0.0, min.y(), 0.0));
-				break;
-			}
-			case Direction::Down:
-			{
-				floors.push_back(K::Vector_3(0.0, max.y(), 0.0));
-				break;
-			}
-			case Direction::In:
-			{
-				floors.push_back(K::Vector_3(0.0, 0.0, min.z()));
-				break;
-			}
-			case Direction::Out:
-			{
-				floors.push_back(K::Vector_3(0.0, 0.0, max.z()));
-				break;
-			}
-		}
-	}
 }
 
 [[nodiscard]] size_t l1n(const Vector3D& a, const Vector3D& b)
@@ -488,6 +403,7 @@ void getFloorVectorsFrom(
 		D.x - (size1Half.x + size2Half.x),
 		D.y - (size1Half.y + size2Half.y),
 		D.z - (size1Half.z + size2Half.z));
+	std::cout << d << std::endl;
 
 	return d.x + d.y + d.z;
 }
@@ -503,7 +419,7 @@ void getFloorVectorsFrom(
 	return std::sqrt(l2nSq(a, b));
 }
 
-[[nodiscard]] std::optional<double> proximity(
+[[nodiscard]] std::optional<double> proximityl1n(
 	Direction direction, const MeshBox& region1, const MeshBox& region2)
 {
 	const Vector3D centroid1 = region1.dims.centroid();
@@ -544,12 +460,12 @@ void getFloorVectorsFrom(
 	return distance;
 }
 
-[[nodiscard]] double proximityScore(
+[[nodiscard]] double proximityCost(
 	Direction direction, 
 	const MeshBox& region1, const MeshBox& region2,
 	size_t modelLength)
 {
-	std::optional<double> prox = proximity(direction, region1, region2);
+	std::optional<double> prox = proximityl1n(direction, region1, region2);
 	if(!prox)
 		return 1.0;
 
@@ -559,88 +475,56 @@ void getFloorVectorsFrom(
 	return BOUNDARY_COEFF + (BOUNDARY_COEFF * proxCoeff);
 }
 
-[[nodiscard]] double computeScore(
+[[nodiscard]] double proximityCost(
+	Direction direction,
+	const MeshBox& source,
+	const std::vector<const MeshBox*>& regions)
+{
+	constexpr double EPSILON = 0.5;
+
+	double totalCost = 0.0;
+	for(const MeshBox* other: regions)
+	{
+		std::optional<double> dist = proximityl1n(direction, source, *other);
+		if(!dist)
+			continue;
+
+		double distCost = (1.0 / (*dist + EPSILON));
+		double distCost2 = distCost * distCost;
+		std::cout << *dist << " => " << distCost2 << std::endl;;
+		totalCost += distCost2;
+	}
+
+	return totalCost;
+}	
+
+[[nodiscard]] double computeCost(
 	const Config& config,
 	const Mesh& parent,
+	double currentPrintCost,
 	Direction direction, 
 	const MeshBox& region,
 	const std::vector<std::unique_ptr<MeshBox>>& regions, 
 	const Grid& grid,
 	mv::vector3<GridCell>& gridCells)
 {
-	// TODO: Best objective: higher or lower?
-	// Bigger distance = better
-	// Bigger area/surf = better
-	// Bigger overhang = worse
-	// So maybe higher is better?
+	// REMEMBER: Lower is better, negative not allowed
 	
-	// Prohibition of Discontinuities
+	// Exclude target from comparison set
+	std::vector<const MeshBox*> others;
+	for(const auto& other: regions)
+	{
+		if(std::addressof(region) != other.get())
+			others.push_back(other.get());
+	}
+	
+	// Grow and Test for Constraint Violations
 	///////////////////////////////////////////////////////////////////////////
 	
-	std::optional<Cuboid> newRegion = extendRegionIn(direction, region.dims, grid);
+	std::optional<Cuboid> newRegion = 
+		safeExpand(direction, region.dims, grid, gridCells);
 	if(!newRegion)
-	{
-#ifdef VERBOSE
-		std::cout << "\t\tCannot grow " << toText(direction) << "." << std::endl;
-#endif
-		return 0.0;
-	}
-
-	//std::vector<GridCell*> samplesOld, samplesNew;
-	//sampleCells(gridCells, region.dims, samplesOld);
-	//sampleCells(gridCells, *newRegion, samplesNew);
-
-	//size_t numBoxesOld = enumerateBoundaries(samplesOld);
-	//size_t numBoxesNew = enumerateBoundaries(samplesNew);
-	
-	std::vector<GridCell*> samples = sampleExpand(direction, gridCells, region);
-
-	//std::cout << numBoxesOld << " " << numBoxesNew << std::endl;
-	if(samples.empty())
-	{
-#ifdef VERBOSE
-		std::cout << "\t\tSampling " << toText(direction) << " is empty." << std::endl;
-#endif
-		return 0.0;
-	}
-
-	bool empty = true;
-	bool anyUnassigned = false;
-	bool willOverlap = false;
-	for(GridCell* cell: samples)
-	{
-		if(cell->type == GridCell::ContentType::Boundary)
-		{
-			empty = false;
-			if(cell->parents.empty())
-				anyUnassigned = true;
-		}
-
-		if(!cell->parents.empty())
-			willOverlap = true;
-	}
-
-	if(empty)
-	{
-#ifdef VERBOSE
-		std::cout << "\t\tCells " << toText(direction) << " are empty." << std::endl;
-#endif
 		return -1.0;
-	}
-	if(willOverlap)
-	{
-#ifdef VERBOSE
-		std::cout << "\t\tGrowth " << toText(direction) << " will overlap." << std::endl;
-#endif
-		return -1.0;
-	}
-	if(!anyUnassigned)
-	{
-#ifdef VERBOSE
-		std::cout << "\t\tAssigned cells " << toText(direction) << "." << std::endl;
-#endif
-		return -1.0;
-	}
 
 	// Compute new MeshBox
 	///////////////////////////////////////////////////////////////////////////
@@ -652,11 +536,7 @@ void getFloorVectorsFrom(
 	// Printability Constraint
 	///////////////////////////////////////////////////////////////////////////
 	
-	std::vector<Direction> upVectors;
-	enumerateUpDirections(newMeshBox, grid, gridCells, upVectors);
-
-	std::vector<Direction> allowedUpDirs;
-	if(!fitsVolume(config, upVectors, newMeshBox.mesh, allowedUpDirs))
+	if(!fitsVolume(config, newMeshBox.mesh))
 	{
 #ifdef VERBOSE
 		std::cout << "\tGrowth " << toText(direction) << " does not fit volume" << std::endl;
@@ -664,87 +544,55 @@ void getFloorVectorsFrom(
 		return -1.0;
 	}
 
+	// Standard Objective
+	///////////////////////////////////////////////////////////////////////////
+	// This accounts for core printing cost + minimal support structure print costs
+	double printCost = printingCost(config, grid, newMeshBox);
+	double dPrintCost = printCost - currentPrintCost;
+
 	// Penalisation of Proximity
 	///////////////////////////////////////////////////////////////////////////
 	
 	const size_t modelLength = l1n(
 		Vector3D(0, 0, 0), Vector3D(
 			grid.getNumBoxesX(), grid.getNumBoxesY(), grid.getNumBoxesZ()));
-	double proxScore = 1.0;
-	for(const auto& other: regions)
-	{
-		if(std::addressof(region) == other.get())
-			continue;
+	double beta = 0.5;
+	double lambda = currentPrintCost * beta;
+	double freeProxCost = proximityCost(direction, newMeshBox, others);
+	double proxCost = lambda * freeProxCost;
 
-		double score = proximityScore(direction, region, *other, modelLength);
-		if(score < proxScore)
-			proxScore = score;
-	}
-
-	// Calculate best orientation overhang
-	///////////////////////////////////////////////////////////////////////////
-
-	auto fnormals = newMeshBox.mesh.add_property_map<face_descriptor, K::Vector_3>(
-		"f:normals", CGAL::NULL_VECTOR).first;
-	PMP::compute_face_normals(newMeshBox.mesh, fnormals);
-	
-	std::vector<K::Vector_3> floors;
-	getFloorVectorsFrom(grid, newMeshBox, allowedUpDirs, floors);
-
-	double bestOverhangCost = std::numeric_limits<double>::max();
-	for(const K::Vector_3& floor: floors)
-	{
-		double cost = overhangCost(config, newMeshBox.mesh, fnormals, floor);
-		if(cost < 0.0)
-		{
-			std::cerr << "OOPS?" << std::endl;
-		}
-
-		if(cost < bestOverhangCost)
-			bestOverhangCost = cost;
-	}
+	std::cout << "\t\t" << proxCost << " (" << freeProxCost << ")" << std::endl;
 
 	// Application of standard objective
 	///////////////////////////////////////////////////////////////////////////
 
-	double printCost = printingCost(config, newMeshBox.mesh);
-	
-	double score = std::abs(printCost + bestOverhangCost) * proxScore;
+	double score = dPrintCost + proxCost;
 #ifdef VERBOSE
 	std::cout << "\t\tScore for " << toText(direction)
-			  << ":   \t" << score << " [Proximity: " << proxScore
-			  << ", Printing: " << printCost 
+			  << ":   \t" << score << " [Proximity: " << proxCost
+			  << ", +Printing: " << dPrintCost 
 			  << "]" << std::endl;
 #endif
 
 	return score;
 }
 
-Direction getBestDirection(const std::unordered_map<Direction,double>& scores)
+Direction getBestDirection(const std::unordered_map<Direction,double>& costs)
 {
-	std::optional<Direction> bestDir = std::nullopt;
-	double bestScore;
-	for(auto& it: scores)
+	Direction best;
+	double bestCost = std::numeric_limits<double>::max();
+	for(auto& it: costs)
 	{
-		if(!bestDir)
+		if(it.second >= 0.0 && it.second < bestCost)
 		{
-			bestDir = it.first;
-			bestScore = it.second;
-		}
-		else
-		{
-			if(it.second > bestScore)
-			{
-				bestDir = it.first;
-				bestScore = it.second;
-			}
+			best = it.first;
+			bestCost = it.second;
 		}
 	}
 
 	//std::cout << toText(*bestDir) << ": " << bestScore << std::endl;
 
-	assert(bestDir);
-	return *bestDir;
+	return best;
 }
 
 void assignCellToBox(MeshBox& box, GridCell& cell)
@@ -825,12 +673,13 @@ bool growBoxIfPossible(
 	const Config& config,
 	const Mesh& parent,
 	MeshBox& targetBox,
+	double currentPrintCost,
 	std::vector<std::unique_ptr<MeshBox>>& sourceBoxes,
 	mv::vector3<GridCell>& gridCells,
 	Grid& grid)
 {
 #ifdef VERBOSE
-	std::cout << "\tComputing score for " << std::addressof(targetBox)
+	std::cout << "\tComputing cost for " << std::addressof(targetBox)
 	          << " " << targetBox.dims
 	          << ":" << std::endl;
 #endif
@@ -840,35 +689,34 @@ bool growBoxIfPossible(
 		Direction::Up, Direction::Down,
 		Direction::In, Direction::Out
 	};
-	std::unordered_map<Direction,double> scores;
+	std::unordered_map<Direction,double> costs;
 
 	for(Direction direction: directions)
 	{
-		double score = computeScore(
+		costs[direction] = computeCost(
 			config, parent,
+			currentPrintCost,
 			direction,
 			targetBox, sourceBoxes,
 			grid, gridCells);
-		scores[direction] = score;
 	}
 
-	Direction bestDirection = getBestDirection(scores);
-	if(scores[bestDirection] > 0.0)
-	{
-#ifdef VERBOSE
-		std::cout << "\tBest Score: " << toText(bestDirection)
-		          << " = " << scores[bestDirection] << std::endl;
-#endif
-		grow(bestDirection, gridCells, targetBox);
-		return true;
-	}
-	else
+	Direction bestDirection = getBestDirection(costs);
+	if(costs[bestDirection] <= 0.0)
 	{
 #ifdef VERBOSE
 		std::cout << "\tNo possible directions detected." << std::endl;
 #endif
 		return false;
 	}
+
+#ifdef VERBOSE
+	std::cout << "\tBest Cost: " << toText(bestDirection)
+			  << " = " << costs[bestDirection] << std::endl;
+#endif
+	grow(bestDirection, gridCells, targetBox);
+
+	return true;
 }
 
 [[nodiscard]]
@@ -923,13 +771,13 @@ void regionGrowth(
 
 	#pragma omp parallel for default(none) shared(sourceBoxes, grid, parent)
 	for(auto& sourceBox: sourceBoxes)
-	{
 		clipFromMesh(grid, parent, *sourceBox);
-	}
 
 	bool test = continueRegionGrowth(sourceBoxes, gridCells);
 	printMeshBoxes(sourceBoxes);
 #else
+	typedef std::pair<MeshBox*,double> BoxScore;
+
 	unsigned int iterNum = 1;
 	while(continueRegionGrowth(sourceBoxes, gridCells))
 	{
@@ -937,15 +785,15 @@ void regionGrowth(
 		std::cout << "Region Growth Iteration " << iterNum << std::endl;
 #endif
 
-		typedef std::pair<MeshBox*,double> BoxScore;
-
 		std::list<BoxScore> rankedBoxes;
 		for(auto& sourceBox: sourceBoxes)
 		{
-			double printCost = printingCost(config, sourceBox->mesh);
+			// TODO: 
+			double printCost = printingCost(config, grid, *sourceBox);
 			rankedBoxes.emplace_back(sourceBox.get(), printCost);
 		}
 
+		// Fastest part so far gets priority
 		rankedBoxes.sort([](const BoxScore& a, const BoxScore& b) {
 			return a.second < b.second;
 		});
@@ -954,7 +802,9 @@ void regionGrowth(
 		for(auto& box: rankedBoxes)
 		{
 			if(growBoxIfPossible(
-				config, parent, *box.first, sourceBoxes, gridCells, grid))
+				config, parent, 
+				*box.first, box.second, 
+				sourceBoxes, gridCells, grid))
 			{
 				onePassed = true;
 				break;
