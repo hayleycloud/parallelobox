@@ -29,7 +29,7 @@ struct Config
 
 	double granularityScale;
 
-	double infillRate;
+	double infillDensity;
 	double supportDensity;
 
 	double proximityFactor;

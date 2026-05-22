@@ -154,7 +154,7 @@ void printUsage() {
 	std::cout << "                          [coarse, regular (default), fine, vfine]." << std::endl;
 	std::cout << "  --printer <file>        Load printer settings from <file>." << std::endl;
 	std::cout << "                          [default: \"printers/default.ini\"]." << std::endl;
-	std::cout << "  --infill <rate>         Infill rate (1.0 = 100%, 0.5 = 50%)." << std::endl;
+	std::cout << "  --infill <rate>         Infill density (1.0 = 100%, 0.5 = 50%)." << std::endl;
 	std::cout << "  --support <density>     Support density (1.0 = 100%, 0.5 = 50%)." << std::endl;
 	std::cout << "  --skip-symmetry         Skip the initial symmetry partition." << std::endl;
 	std::cout << "  --sample-tries          Number of times to try km++ seeding." << std::endl;
@@ -226,13 +226,13 @@ void printUsage() {
 	if(printerConfigPath)
 		printerConfigFile = *printerConfigPath;
 
-	float infillRate = 0.2;		// 20% as default
-	auto infillRateArg = args.getFloat("--infill");
-	if(infillRateArg)
-		infillRate = *infillRateArg;
-	config.infillRate = infillRate;
+	float infillDensity = 0.2;		// 20% as default
+	auto infillDensityArg = args.getFloat("--infill");
+	if(infillDensityArg)
+		infillDensity = *infillDensityArg;
+	config.infillDensity = infillDensity;
 
-	float supportDensity = 0.5;		// 20% as default
+	float supportDensity = 0.5;		// 50% as default
 	auto supportDensityArg = args.getFloat("--support");
 	if(supportDensityArg)
 		supportDensity = *supportDensityArg;
@@ -295,7 +295,7 @@ void printConfig(const Config& config)
 	std::cout << "    Overhang tolerance: " 
 		      << printer.overhangTolerance << "°" << std::endl;
 
-	std::cout << "Infill rate: " << config.infillRate * 100 << "\%" << std::endl;
+	std::cout << "Infill density: " << config.infillDensity * 100 << "\%" << std::endl;
 	
 	std::cout << "Support density: " << config.supportDensity * 100 << "\%" << std::endl;
 

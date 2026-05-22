@@ -406,6 +406,7 @@ int getDiscreteEmptyRegions(
 	const Config& config,
 	const Mesh& parent,
 	double currentPrintCost,
+	double currentParallelCost,
 	Direction direction, 
 	const MeshBox& region,
 	const Grid& grid,
@@ -445,6 +446,8 @@ int getDiscreteEmptyRegions(
 	///////////////////////////////////////////////////////////////////////////
 	// This accounts for core printing cost + minimal support structure print costs
 	double printCost = printingCost(config, grid, newMeshBox, printCostCache);
+	if(printCost > currentParallelCost)
+		return -1.0;
 	double dPrintCost = printCost - currentPrintCost;
 
 	// Application of standard objective
@@ -464,6 +467,7 @@ bool growBoxIfPossible(
 	const Mesh& parent,
 	MeshBox& targetBox,
 	double currentPrintCost,
+	double currentParallelCost,
 	mv::vector3<GridCell>& gridCells,
 	const Grid& grid,
 	PrintingCostCache& printCostCache)
@@ -483,12 +487,13 @@ bool growBoxIfPossible(
 	for(Direction direction: directions)
 		costs[direction] = -1.0;
 
-	#pragma omp parallel for default(none) shared(directions, costs, config, parent, currentPrintCost, targetBox, grid, gridCells, printCostCache)
+	#pragma omp parallel for default(none) shared(directions, costs, config, parent, currentPrintCost, currentParallelCost, targetBox, grid, gridCells, printCostCache)
 	for(Direction direction: directions)
 	{
 		costs[direction] = computeEmptyFillCost(
 			config, parent,
 			currentPrintCost,
+			currentParallelCost,
 			direction,
 			targetBox, 
 			grid, gridCells,
@@ -542,7 +547,12 @@ std::unique_ptr<MeshBox> fillEmptyBoundarySpace(
 
 	double currentPrintCost = printingCost(config, grid, *meshBox, printCostCache);
 	while(growBoxIfPossible(
-		config, mesh, *meshBox, currentPrintCost, gridCells, grid, printCostCache))
+		config, 
+		mesh, 
+		*meshBox, 
+		currentPrintCost, currentParallelCost,
+		gridCells, grid, 
+		printCostCache))
 	{
 		currentPrintCost = printingCost(config, grid, *meshBox, printCostCache);
 	}

@@ -57,8 +57,10 @@ double overhangCost(
 
 double printingCost(const Config& config, const Mesh& mesh)
 {
-	const double volumeCost = PMP::volume(mesh) / config.printer.infillSpeed; 
-	const double surfaceCost = PMP::area(mesh) / config.printer.shellSpeed;
+	const double volume = PMP::volume(mesh) * config.infillDensity;
+	const double area = PMP::area(mesh);
+	const double volumeCost = volume / config.printer.infillSpeed; 
+	const double surfaceCost = area / config.printer.shellSpeed;
 	// TODO: squared_face_area for improved performance?
 	return volumeCost + surfaceCost;
 }
