@@ -5,6 +5,7 @@
 #include "grid_cut.h"
 #include "meshbox.h"
 
+
 int calcMinNumPrinters(const Config& config, const Mesh& mesh);
 
 double overhangCost(
@@ -18,12 +19,46 @@ double printingCost(const Config& config, const Mesh& mesh);
 
 bool fitsVolume(const Config& config, const Mesh& mesh);
 
+bool fitsVolume(const Config& config, double width, double height, double depth);
+
 std::vector<Direction> calcOrientationsThatFit(const Config& config, const Mesh& mesh);
 
-double printingCost(const Config& config, const Grid& grid, const MeshBox& meshBox);
+double printingCost(
+	const Config& config,
+	const Grid& grid, 
+	const MeshBox& meshBox);
+	
 
-/*double fitness(const Config& config, const Mesh& mesh);*/
+struct PrintingCostCacheData
+{
+	Cuboid lastDims;
+	double printCost;
 
-double fullScore(const Config& config, const std::vector<const Mesh*>& printers);
+	PrintingCostCacheData(const Cuboid& dims, double printCost) 
+	: lastDims(dims), printCost(printCost) {};
+};
+
+typedef std::unordered_map<const MeshBox*,PrintingCostCacheData> PrintingCostCache;
+
+void pruneCache(
+	const std::vector<std::unique_ptr<MeshBox>>& meshBoxes,
+	PrintingCostCache& cache);
+
+void pruneCache(
+	const std::vector<const MeshBox*>& meshBoxPtrs,
+	PrintingCostCache& cache);
+	
+
+double printingCost(
+	const Config& config,
+	const Grid& grid, 
+	const MeshBox& meshBox,
+	PrintingCostCache& cache);
+
+double parallelPrintingCost(
+	const Config& config, 
+	const Grid& grid, 
+	const std::vector<const MeshBox*>& printers,
+	PrintingCostCache& cache);
 
  

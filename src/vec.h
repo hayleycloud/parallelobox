@@ -66,6 +66,11 @@ struct Cuboid
 	}
 
 	friend std::ostream& operator<<(std::ostream& strm, const Cuboid& cuboid);
+
+	bool operator==(const Cuboid& other) const
+    {
+		return origin == other.origin && size == other.size;
+    }
 };
 
  

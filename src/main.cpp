@@ -1,15 +1,15 @@
+#include "reporting.h"
 #include "cgals.h"
 #include "config.h"
 #include "grid_cut.h"
 #include "meshbox.h"
-#include "symmetry.h"
 #include "align.h"
-//#include "blockmerge.h"
+#include "symmetry.h"
 #include "clustering.h"
-#include "fillempty.h"
 #include "regiongrowth.h"
-#include "objective.h"
+#include "fillempty.h"
 #include "resolve.h"
+#include "objective.h"
 #include "multivec.h"
 #include "random.h"
 
@@ -17,8 +17,9 @@
 #include <fstream>
 #include <filesystem>
 
+#define EXPORT_SEED_BLOCKS	true
 #define EXPORT_ALL_TRIES	true
-#define EXPORT_EMPTIES		false
+#define RESOLVE_EMPTIES		true
 
 namespace fs = std::filesystem;
 
@@ -83,6 +84,44 @@ K::Vector_3 toVector(Direction direction)
 	}
 
 	return { 0, 0, 0 };
+}
+
+K::Vector_3 normalize(const K::Vector_3& v)
+{
+	return v * (1.0 / CGAL::sqrt(v.squared_length()));
+}
+
+MeshErrorSet validate(Mesh& mesh, bool throwOnFail)
+{
+	MeshErrorSet errors = NO_MESH_ERRORS;
+
+	auto fparts = mesh.add_property_map<face_descriptor, std::size_t>("f:part").first;
+	int numSeparatedRegions = PMP::connected_components(mesh, fparts);
+	mesh.remove_property_map(fparts);
+	if(numSeparatedRegions > 1)
+	{
+		if(throwOnFail)
+			throw std::runtime_error("Mesh is discontinuous!");
+		SET_MESH_ERROR(errors, MeshErrors::NonManifold);
+	}
+
+	if(!PMP::triangulate_faces(mesh))
+	{
+		if(throwOnFail)
+			throw std::runtime_error("Mesh not triangulated!");
+		SET_MESH_ERROR(errors, MeshErrors::NonTriangular);
+	}
+
+	PMP::autorefine(mesh);
+
+	if(PMP::does_self_intersect(mesh))
+	{
+		if(throwOnFail)
+			throw std::runtime_error("Mesh self-intersects!");
+		SET_MESH_ERROR(errors, MeshErrors::SelfIntersects);
+	}
+
+	return errors;
 }
 
 GridCell* getNearestBoundaryTo(
@@ -154,71 +193,35 @@ std::vector<std::unique_ptr<MeshBox>> getSourceMeshBoxesFrom(
 	return sourceMeshBoxes;
 }
 
-void verifyClusters(
-	const std::vector<Cluster>& clusters,
-	const K::Point_3& min, const K::Point_3& max)
-{
-	for(const Cluster& cluster: clusters)
-	{
-		const K::Point_3& centroid = cluster.centroid;
-		if(    centroid.x() > min.x() && centroid.x() < max.x()
-			&& centroid.y() > min.y() && centroid.y() < max.y()
-			&& centroid.z() > min.z() && centroid.z() < max.z())
-		{}
-		else 
-			//throw std::runtime_error("Cluster centroid outside of mesh!");
-		{
-			std::cerr << "Cluster centroid (" << centroid << ") "
-				      << "outside of mesh! (min: " << min << ", max: " << max << ")";
-		}
-	}
-}
-
-[[nodiscard]]
-std::vector<Cluster> filterVerifiedClusters(
-	const std::vector<Cluster>& clusters,
-	const K::Point_3& min, const K::Point_3& max)
-{
-	std::vector<Cluster> filtered;
-
-	for(const Cluster& cluster: clusters)
-	{
-		const K::Point_3& centroid = cluster.centroid;
-		if(    centroid.x() > min.x() && centroid.x() < max.x()
-			&& centroid.y() > min.y() && centroid.y() < max.y()
-			&& centroid.z() > min.z() && centroid.z() < max.z())
-		{
-			filtered.push_back(cluster);
-		}
-	}
-
-	return filtered;
-}
-
 void assignMeshBoxesFrom(
 	const Mesh& parent, 
 	const Grid& grid,
 	mv::vector3<GridCell>& gridCells,
 	const std::vector<Cuboid>& regions, 
-	std::vector<MeshBox>& meshBoxes)
+	std::vector<std::unique_ptr<MeshBox>>& meshBoxes)
 {
 	for(const Cuboid& region: regions)
 	{
-		meshBoxes.emplace_back(MeshBox(region));
-		MeshBox* meshBox = std::addressof(meshBoxes.back());
-		clipFromMesh(grid, parent, *meshBox);
+		Mesh mesh;
+		if(INVALID(clipFromMesh(grid, parent, region, mesh)))
+		{
+			std::cerr << "Mesh clip error?" << std::endl;
+		}
 
 		std::vector<GridCell*> sampledCells;
 		sampleCells(gridCells, region, sampledCells);
 
+		std::unique_ptr<MeshBox> meshBox = 
+			std::make_unique<MeshBox>(mesh, region, sampledCells);
+
 		for(GridCell* cell: sampledCells)
 		{
 			if(cell->parents.size() > 0)
-				std::cerr << "OOPSIE! Already parented!" << std::endl;
-
-			cell->parents.push_back(meshBox);
-			meshBox->children.push_back(cell);
+				std::cerr << "OOPSIE! Already parented!?" << std::endl;
+			cell->parents.push_back(meshBox.get());
 		}
+
+		meshBoxes.emplace_back(std::move(meshBox));
 	}
 }
 
@@ -234,8 +237,8 @@ void saveMeshes(const std::string& directory, const std::vector<const Mesh*>& me
 
 		if(CGAL::IO::write_STL(directory + "/" + ss.str(), *mesh))
 		{
-#ifdef VERBOSE
-			std::cout << "Saved " << ss.str() << std::endl;
+#if REPORT_VERBOSE
+			//std::cout << "Saved " << ss.str() << std::endl;
 #endif
 		}
 		else
@@ -253,20 +256,52 @@ void saveMeshes(const std::string& directory, const std::vector<Mesh>& meshes)
 	saveMeshes(directory, meshPtrs);
 }
 
-void processSubMesh(
+void saveMeshes(const std::string& directory, const std::vector<const MeshBox*>& meshes)
+{
+	std::vector<const Mesh*> meshPtrs;
+	for(const MeshBox* mesh: meshes)
+		meshPtrs.push_back(std::addressof(mesh->mesh));
+	saveMeshes(directory, meshPtrs);
+}
+
+std::string getType(GridCell::ContentType type)
+{
+	switch(type)
+	{
+		case GridCell::ContentType::Boundary:
+			return "Boundary";
+		case GridCell::ContentType::Internal:
+			return "Internal";
+		case GridCell::ContentType::Empty:
+			return "Empty";
+	}
+	return "";
+}
+
+void refine(std::vector<const MeshBox*>& meshBoxes)
+{
+}
+
+
+bool processSubMesh(
 	const Config& config, 
 	int subIndex,
 	int numPrinters,
 	Mesh& mesh, 
 	std::vector<Mesh>& out)
 {
-	std::stringstream strstrm("");
-	strstrm << subIndex;
-	std::string parentDirectory = config.outputDir + "/" + strstrm.str();
+	std::string parentDirectory = config.outputDir;
+
+	if(!config.symmetrySkip)
+	{
+		std::stringstream strstrm("");
+		strstrm << subIndex;
+		parentDirectory += "/" + strstrm.str();
+	}
 
 	recenter(mesh);
 
-#ifdef VERBOSE
+#if REPORT_EXTRA
 	std::cout << "Sub-mesh re-centered." << std::endl;
 #endif
 	
@@ -275,7 +310,7 @@ void processSubMesh(
 	K::Point_3 min, max;
 	bounds(mesh, min, max);
 
-#ifdef VERBOSE
+#if REPORT_EXTRA
 	std::cout << "Min: " << min << ", Max: " << max << std::endl;
 #endif
 
@@ -283,14 +318,23 @@ void processSubMesh(
 	max = max + K::Vector_3(1.0, 1.0, 1.0);
 
 	int minNumPrinters = calcMinNumPrinters(config, mesh);
+	if(minNumPrinters > numPrinters)
+	{
+		std::cout << "Too few printers available for mesh of this size!" << std::endl;
+		std::cout << "(" << minNumPrinters << " required, but only " 
+				  << numPrinters << " available)" << std::endl;
+		return false;
+	}
 
+#if REPORT_STANDARD
 	std::cout << "Minimum # of printers required: " << minNumPrinters << std::endl;
+#endif
 
 	auto fnormals = mesh.add_property_map<face_descriptor, K::Vector_3>(
 		"f:normals", CGAL::NULL_VECTOR).first;
 	PMP::compute_face_normals(mesh, fnormals);
 
-#ifdef VERBOSE
+#if REPORT_EXTRA
 	std::cout << "Computed normals." << std::endl;
 #endif
 
@@ -302,107 +346,146 @@ void processSubMesh(
 	std::vector<double> itrScores;
 	itrScores.reserve(numPrinters - minNumPrinters);
 
+	unsigned int skipTo = 0;
+
 	for(unsigned int i = numPrinters; i > minNumPrinters; --i)
 	{
 		double score = 0.0;
 		std::vector<double> subitrScores;
-		std::vector<int> emptyCounts;
 
+#if REPORT_BARE
 		std::cout << std::endl;
+
 		std::cout << "Running with " << i << " boxes..." << std::endl;
+#endif
 
 		for(unsigned int j = 0; j < config.sampleTries; ++j)
 		{
-			double subscore = 0.0;
-
+#if REPORT_STANDARD
 			std::cout << "[Attempt " << j+1 << "...]" << std::endl;
+#endif
 
 			resetGridCells(gridCells);
 
 			std::vector<Cluster> clusters = getClusters(i, mesh);
 			clusters = filterVerifiedClusters(clusters, min, max);
 
-			std::vector<std::unique_ptr<MeshBox>> meshBoxes;
-			meshBoxes = getSourceMeshBoxesFrom(clusters, grid, gridCells);
-
-			regionGrowth(config, mesh, meshBoxes, gridCells, grid);
-
-			int freePrinters = numPrinters - meshBoxes.size();
-
-			std::vector<Cuboid> emptyRegions;
-			if(!getDiscreteEmptyRegions(grid, gridCells, freePrinters, emptyRegions))
+			if(skipTo > 0 && i > skipTo)
 			{
-#ifdef VERBOSE
-				std::cout << "Too many empty regions!" << std::endl;
+				subitrScores.push_back(-1.0);
+#if REPORT_EXTRA
+				std::cout << "Skipping." << std::endl;
+				std::cout << subitrScores.size() << std::endl;
 #endif
-				subscore = -1.0;
+				continue;
 			}
 
-			emptyCounts.push_back(emptyRegions.size());
-#ifdef VERBOSE
-			std::cout << emptyRegions.size() << " empty regions." << std::endl;
-#endif
-
-			std::vector<const Mesh*> mbPtrs;
-			for(auto& mb: meshBoxes)
-				mbPtrs.push_back(&mb->mesh);
-
-			std::vector<MeshBox> newMeshBoxes;
-			assignMeshBoxesFrom(mesh, grid, gridCells, emptyRegions, newMeshBoxes);
-
-			for(auto& mb: newMeshBoxes)
-				mbPtrs.push_back(&mb.mesh);
+			std::vector<std::unique_ptr<MeshBox>> meshBoxes;
+			meshBoxes = getSourceMeshBoxesFrom(clusters, grid, gridCells);
 
 			std::stringstream sis("");
 			sis << i << "-" << j;
 			std::string dirName = parentDirectory + "/itr" + sis.str();
 			fs::create_directory(dirName);
+
+#ifdef EXPORT_SEED_BLOCKS
+			std::vector<Mesh> clusterMeshes;
+			for(auto& mb: meshBoxes)
+				clusterMeshes.emplace_back(mb->mesh);
+
+			std::string clusterDir = dirName + "/seeds";
+			fs::create_directory(clusterDir);
+			saveMeshes(clusterDir, clusterMeshes);
+#endif
+
+			PrintingCostCache printCostCache;
+
+			regionGrowth(config, mesh, meshBoxes, grid, gridCells, printCostCache);
+
+			std::vector<const MeshBox*> mbPtrs;
+			for(auto& mb: meshBoxes)
+				mbPtrs.push_back(mb.get());
+
+			double parallelCost = parallelPrintingCost(config, grid, mbPtrs, printCostCache);
+			double firstCost = parallelCost;
+
+			//saveMeshes(dirName, mbPtrs);
+
+			//std::cout << "Blocks Grown." << std::endl;
+			int freePrinters = numPrinters - meshBoxes.size();
+
+			std::vector<std::unique_ptr<MeshBox>> newMeshBoxes;
+			fillEmptyBoundarySpaces(
+				config, mesh, newMeshBoxes, parallelCost, grid, gridCells, printCostCache);
+			/*std::vector<Cuboid> emptyRegions;
+			int numEmptyRegions = getDiscreteEmptyRegions(
+				config, grid, gridCells, emptyRegions);*/
+			parallelCost = parallelPrintingCost(config, grid, mbPtrs, printCostCache);
+
+			int numEmptyRegions = newMeshBoxes.size();
+			bool modelCovered = true;
+
+#if REPORT_STANDARD
+			std::cout << "After Block Growth Phase: " << std::endl;
+			std::cout << "\tParallel Printing Time = " << firstCost;
+			std::cout << " | " << parallelCost << std::endl;
+			std::cout << "\t# meshes: " << meshBoxes.size();
+			std::cout << " | # empty regions: " << numEmptyRegions;
+			std::cout << " => # total: " << meshBoxes.size() + numEmptyRegions;
+			std::cout << std::endl;
+
+			if(!modelCovered)
+				std::cout << "ERR: Could not fill all empty regions!" << std::endl;
+#endif
+
+			bool noExcessPrinters = true;
+#if RESOLVE_EMPTIES == true
+			for(auto& mb: newMeshBoxes)
+				mbPtrs.push_back(mb.get());
+
+			noExcessPrinters = mergeEmptyRegions(
+				config, 
+				meshBoxes, newMeshBoxes, mbPtrs,
+				parallelCost, numPrinters, 
+				grid, gridCells,
+				printCostCache,
+				false);
+			
+			parallelCost = parallelPrintingCost(config, grid, mbPtrs, printCostCache);
+#if REPORT_STANDARD
+			std::cout << "After Empty Resolution Phase: " << std::endl;
+			std::cout << "\tParallel Printing Time = " << parallelCost << std::endl;
+			std::cout << "\t# meshes: " << meshBoxes.size();
+			std::cout << " | # empty regions: " << newMeshBoxes.size();
+			std::cout << " => # total: " << meshBoxes.size() + newMeshBoxes.size();
+			std::cout << std::endl;
+#endif
+#endif
 			saveMeshes(dirName, mbPtrs);
 
-			if(subscore >= 0.0)
-				subscore = fullScore(config, mbPtrs);
-			subitrScores.push_back(subscore);
-
-/*#if EXPORT_EMPTIES == true
-			std::vector<MeshBox> emptyMeshBoxes;
-			for(const Cuboid& region: emptyRegions)
+			if(modelCovered && noExcessPrinters)
 			{
-				emptyMeshBoxes.emplace_back(MeshBox(region));
-				clipFromMesh(grid, mesh, emptyMeshBoxes.back());
-#ifdef VERBOSE
-				std::cout << "\t" << region << std::endl;
+				subitrScores.push_back(parallelCost);
+			}
+			else {
+				subitrScores.push_back(-1.0);
+#if REPORT_STANDARD
+				std::cout << "Attempt failed." << std::endl;
 #endif
 			}
-
-			std::vector<const Mesh*> embPtrs;
-			for(const MeshBox& mb: emptyMeshBoxes)
-				embPtrs.push_back(&mb.mesh);
-
-			std::string dirNameEmpties = dirName + "/empties";
-			fs::create_directory(dirNameEmpties);
-			saveMeshes(dirNameEmpties, embPtrs);
-#endif*/
 		}
 
 		int bestIndex = -1;
-		int bestEmptyCount = std::numeric_limits<int>::max();
-		score = std::numeric_limits<int>::max();
+		score = std::numeric_limits<double>::max();
 		for(int index = 0; index < config.sampleTries; ++index) 
 		{
 			if(subitrScores[index] <= 0.0)
 				continue;
 
-			if(emptyCounts[index] < bestEmptyCount)
+			if(subitrScores[index] < score)
 			{
-				bestIndex = index;
-				bestEmptyCount = emptyCounts[index];
 				score = subitrScores[index];
-			}
-			else if(emptyCounts[index] == bestEmptyCount &&
-					subitrScores[index] < score)
-			{
 				bestIndex = index;
-				score = subitrScores[index];
 			}
 		}
 
@@ -415,8 +498,15 @@ void processSubMesh(
 			sis3 << i;
 			std::string targetDirName = parentDirectory + "/itr" + sis3.str();
 			fs::rename(srcDirName, targetDirName);
-			std::cout << "Good things" << std::endl;
+#if REPORT_STANDARD
+			std::cout << "Selected attempt " << bestIndex+1 << " as best." << std::endl;
+#endif
 		}
+#if REPORT_STANDARD	
+		else {
+			std::cout << "No attempt succeeded." << std::endl;
+		}
+#endif
 
 #if EXPORT_ALL_TRIES == false
 		for(int index = 0; index < config.sampleTries; ++index)
@@ -427,10 +517,10 @@ void processSubMesh(
 		}
 #endif
 
-		itrScores.push_back(score);
+		itrScores.push_back(bestIndex >= 0 ? score : -1.0);
 	}
 
-#ifdef VERBOSE
+#if REPORT_STANDARD
 	std::cout << std::endl;
 #endif
 	
@@ -439,10 +529,16 @@ void processSubMesh(
 	int subNumPrinters = numPrinters, bestNumPrinters;
 	for(double score: itrScores)
 	{
+#if REPORT_BARE
 		std::cout << "Iteration " << itrIndex+1 << ": " << subNumPrinters 
 			      << " printers => ";
+#endif
 		if(score <= 0.0)
+		{
+#if REPORT_BARE
 			std::cout << "Failed";
+#endif
+		}
 		else 
 		{
 			if(score < bestScore)
@@ -451,15 +547,30 @@ void processSubMesh(
 				bestIndex = itrIndex;
 				bestNumPrinters = subNumPrinters;
 			}
+#if REPORT_BARE
 			std::cout << "Success [score = " << score << "]!";
+#endif
 		}
+#if REPORT_BARE
 		std::cout << std::endl;
+#endif
 		itrIndex++;
 		subNumPrinters--;
 	}
 
+	if(bestIndex < 0)
+	{
+#if REPORT_BARE
+		std::cout << "No Valid Results Found!" << std::endl;
+#endif
+		return false;
+	}
+
+#if REPORT_BARE
 	std::cout << "Best Iteration: " << bestIndex+1;
 	std::cout << " (# printers: " << bestNumPrinters << ")" << std::endl;
+	std::cout << "Best Parallel Print Cost: " << bestScore << std::endl;
+#endif
 
 	// Move correct folder to main
 	std::stringstream sms("");
@@ -467,6 +578,8 @@ void processSubMesh(
 	std::string bestDir = parentDirectory + "/itr" + sms.str();
 
 	fs::rename(bestDir, parentDirectory + "/best");
+
+	return true;
 }
 
 int run(int argc, const char* argv[])
@@ -474,11 +587,14 @@ int run(int argc, const char* argv[])
 	Arguments args(argc, argv);
 	Config config = handleArguments(args);
 
+#if REPORT_STANDARD
 	std::cout << std::endl;
 	printConfig(config);
-	std::cout << std::endl;
 
-	initRandom(config.seed);
+	std::cout << "Seed: " << initRandom(config.seed) << " ";
+	std::cout << (config.seed ? "(manual)" : "(automatic)") << std::endl;
+	std::cout << std::endl;
+#endif
 
 	std::chrono::time_point<std::chrono::steady_clock> startIval = 
 		std::chrono::steady_clock::now();
@@ -487,26 +603,38 @@ int run(int argc, const char* argv[])
 	if(!PMP::IO::read_polygon_mesh(config.inputFile, inputMesh)) 
 		throw std::runtime_error(config.inputFile + " could not be loaded!");
 
-	if(CGAL::Polygon_mesh_processing::does_self_intersect(inputMesh))
-		throw std::runtime_error("Mesh self-intersects!");
+	validate(inputMesh, true);
 
+#if REPORT_STANDARD
 	std::cout << "Mesh loaded!" << std::endl;
+#endif
 
 	recenter(inputMesh);
 
+#if REPORT_EXTRA
 	std::cout << "Mesh re-centered." << std::endl;
+#endif
 
+	bool symmetrySucceeded = true;
 	std::vector<Mesh> subMeshes;
 	Mesh rightMesh, leftMesh;
 	if(!config.symmetrySkip &&
-	   symmetrySplit(inputMesh, &rightMesh, &leftMesh))
+	   (symmetrySucceeded = symmetrySplit(inputMesh, &rightMesh, &leftMesh)))
 	{
+		validate(rightMesh, true);
+		validate(leftMesh, true);
 		subMeshes.push_back(rightMesh);
 		subMeshes.push_back(leftMesh);
-		std::cout << "Applied preemptive optimisation: symmetric partition." << std::endl;
+#if REPORT_STANDARD
+		std::cout << "Applied preemptive optimization: symmetric partition." << std::endl;
+#endif
 	} else {
 		subMeshes.push_back(inputMesh);
-		std::cout << "No preemptive optimisation applied." << std::endl;
+#if REPORT_STANDARD
+		if(!symmetrySucceeded)
+			std::cout << "Could not find an appropriate symmetric partition for optimization." << std::endl;
+		std::cout << "No preemptive optimization applied." << std::endl;
+#endif
 	}
 	
 	std::vector<std::vector<Mesh>> subMeshSubDivs;
@@ -515,22 +643,35 @@ int run(int argc, const char* argv[])
 	fs::remove_all(config.outputDir);
 	fs::create_directory(config.outputDir);
 
+	// TODO: Odd printers?
 	int numPrinters = config.numPrinters / subMeshSubDivs.size();
 
 	for(unsigned int index = 0; index < subMeshSubDivs.size(); ++index)
 	{
-		std::stringstream ss("");
-		ss << index;
+		std::string dirName = config.outputDir;
 
-		std::string dirName = config.outputDir + "/" + ss.str();
+		if(!config.symmetrySkip)
+		{
+			std::stringstream ss("");
+			ss << index;
+			dirName += "/" + ss.str();
+		}
+
 		fs::create_directory(dirName);
 
-		processSubMesh(
+		bool success = processSubMesh(
 			config, 
 			index, 
 			numPrinters, 
 			subMeshes[index], 
 			subMeshSubDivs[index]);
+		if(!success)
+		{
+#if REPORT_STANDARD
+			std::cout << "Sub-mesh pass failed! Dropping out." << std::endl;
+#endif
+			break;
+		}
 	}
 
 	std::chrono::time_point<std::chrono::steady_clock> endIval =
@@ -538,7 +679,9 @@ int run(int argc, const char* argv[])
 	std::chrono::duration<double, std::milli> duration =
 		endIval - startIval;
 
+#if REPORT_STANDARD
 	std::cout << "Computation Time: " << duration.count() << " ms" << std::endl;
+#endif
 
 	return EXIT_SUCCESS;
 }

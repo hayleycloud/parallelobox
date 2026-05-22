@@ -66,22 +66,6 @@ void getSurfaceBoxes(
 						Vector3D(x, y, z), {}, {}, contentType
 					};
 				}
-
-
-				/*if(contentType == GridCell::ContentType::Boundary)
-				{
-                    #pragma omp critical
-					meshBoxes.emplace_back(std::make_unique<MeshBox>((MeshBox){
-						volMesh, 
-						Cuboid(Vector3D(x, y, z), Vector3D(1, 1, 1)),
-						{ std::addressof(gridCells[z][y][x]) }, 
-						std::array<bool,NUM_SIDES>()
-					}));
-
-					gridCells[z][y][x].parent = meshBoxes.back().get();
-					for(auto& sideParent: gridCells[z][y][x].sideParents)
-						sideParent = gridCells[z][y][x].parent;
-				}*/
 			}
 		}
 	}
@@ -143,6 +127,27 @@ Cuboid getDimsFrom(std::vector<GridCell*>& children)
 	return { min, size };
 }
 
+std::vector<GridCell*> sampleCells(
+	mv::vector3<GridCell>& gridCells,
+	const Vector3D& a, const Vector3D& b)
+{
+	std::vector<GridCell*> cells;
+
+    for(int x = a.x; x < b.x; ++x)
+	{
+        for(int y = a.y; y < b.y; ++y)
+		{
+            for(int z = a.z; z < b.z; ++z)
+			{
+				GridCell* cell = std::addressof(mv::get(gridCells, x, y, z));
+				assert(cell);
+				cells.push_back(cell);
+            }
+        }
+    }
+
+	return cells;
+}
 
 void resetGridCells(mv::vector3<GridCell>& gridCells)
 {
@@ -201,110 +206,213 @@ void getFloorVectorsFrom(
 	}
 }
 
-/*bool getNeighbouringEmptyCells(
-	const Vector3D& position,
-	const Grid& grid, 
-	const mv::vector3<GridCell>& gridCells,
-	std::set<const GridCell*>& emptyCells)
-{
-	const GridCell& cell = mv::get(gridCells, position.x, position.y, position.z);
-	if(cell.type != GridCell::ContentType::Boundary || !cell.parents.empty())
-		return false;
-
-	if(emptyCells.insert(std::addressof(cell)).second == false)
-		return false;
-
-	const std::vector<Vector3D> directions = {
-		Vector3D(-1, 0, 0),	Vector3D(1, 0, 0),
-		Vector3D(0, -1, 0), Vector3D(0, 1, 0),
-		Vector3D(0, 0, -1), Vector3D(0, 0, 1)
-	};
-	std::vector<Vector3D> positions;
-	for(const Vector3D& direction: directions)
-	{
-		Vector3D newPos = position + direction;
-		if(newPos.x >= 0 && newPos.y >= 0 && newPos.z >= 0
-			&& newPos.x < grid.getNumBoxesX() && newPos.y < grid.getNumBoxesY() && newPos.z < grid.getNumBoxesZ())
-			getNeighbouringEmptyCells(newPos, grid, gridCells, emptyCells);
-	}
-
-	return true;
-}
-
-int calcDiscreteRegions(
-	const Grid& grid, 
-	mv::vector3<GridCell>& gridCells, 
-	std::vector<std::vector<const GridCell*>>& regions)
-{
-	std::set<const GridCell*> allEmptyCells;
-
-	while(true)
-	{
-		std::set<const GridCell*> emptyCells;
-
-		bool found = false;
-		Vector3D seedPos;
-		mv::forEachIndexed<GridCell>([&](const GridCell& cell, int x, int y, int z) {
-			if(!found && 
-			   cell.type == GridCell::ContentType::Boundary && 
-			   cell.parents.empty())
-			{
-				if(!allEmptyCells.contains(std::addressof(cell)))
-				{
-					found = true;
-					seedPos = Vector3D(x, y, z);
-				}
-			}
-		}, gridCells);
-
-		if(!found)
-			return regions.size();
-
-		getNeighbouringEmptyCells(seedPos, grid, gridCells, emptyCells);
-		for(const GridCell* cell: emptyCells)
-			allEmptyCells.insert(cell);
-		regions.emplace_back(std::vector<const GridCell*>(emptyCells.cbegin(), emptyCells.cend()));
-	}
-}
-
-int getDiscreteEmptyRegions(
+std::vector<MeshBox*> getNeighbours(
 	const Grid& grid,
-	mv::vector3<GridCell>& gridCells,
-	std::vector<Cuboid>& emptyRegions)
+	const MeshBox& box,
+	mv::vector3<GridCell>& gridCells)
 {
-	std::vector<std::vector<const GridCell*>> regionCells;
-	int numRegions = calcDiscreteRegions(grid, gridCells, regionCells);
+	std::set<MeshBox*> neighbours;
 
-	for(const auto& region: regionCells)
-		emptyRegions.emplace_back(getDimsFrom(region));
+	if(box.dims.origin.x > 0)
+	{
+		Vector3D btmLeftOut = box.dims.origin;
+		--btmLeftOut.x;
 
-	return numRegions;
-}*/
+		Vector3D topLeftIn = 
+			btmLeftOut + Vector3D(1, box.dims.size.y, box.dims.size.z);
 
-void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child)
+		for(const GridCell* cell: sampleCells(gridCells, btmLeftOut, topLeftIn))
+			if(!cell->parents.empty())
+				neighbours.insert(cell->parents.front());
+
+	}
+
+	if(box.dims.end().x < grid.getNumBoxesX())
+	{
+		const Vector3D btmRightOut = 
+			box.dims.origin + Vector3D(box.dims.size.x, 0, 0);
+		const Vector3D topRightIn = 
+			btmRightOut + Vector3D(1, box.dims.size.y, box.dims.size.z);
+
+		for(const GridCell* cell: sampleCells(gridCells, btmRightOut, topRightIn))
+			if(!cell->parents.empty())
+				neighbours.insert(cell->parents.front());
+	}
+
+	if(box.dims.origin.y > 0)
+	{
+		Vector3D btmLeftOut = box.dims.origin;
+		--btmLeftOut.y;
+
+		Vector3D btmRightIn =
+			btmLeftOut + Vector3D(box.dims.size.x, 1, box.dims.size.z);
+
+		for(const GridCell* cell: sampleCells(gridCells, btmLeftOut, btmRightIn))
+			if(!cell->parents.empty())
+				neighbours.insert(cell->parents.front());
+	}
+
+	if(box.dims.end().y < grid.getNumBoxesY())
+	{
+		const Vector3D topLeftOut = 
+			box.dims.origin + Vector3D(0, box.dims.size.y, 0);
+		const Vector3D topRightIn = 
+			topLeftOut + Vector3D(box.dims.size.x, 1, box.dims.size.z);
+
+		for(const GridCell* cell: sampleCells(gridCells, topLeftOut, topRightIn))
+			if(!cell->parents.empty())
+				neighbours.insert(cell->parents.front());
+	}
+
+	if(box.dims.origin.z > 0)
+	{
+		Vector3D btmLeftOut = box.dims.origin;
+		--btmLeftOut.z;
+
+		Vector3D topRightOut =
+			btmLeftOut + Vector3D(box.dims.size.x, box.dims.size.y, 1);
+
+		for(const GridCell* cell: sampleCells(gridCells, btmLeftOut, topRightOut))
+			if(!cell->parents.empty())
+				neighbours.insert(cell->parents.front());
+	}
+
+	if(box.dims.end().z < grid.getNumBoxesZ())
+	{
+		const Vector3D btmLeftIn = 
+			box.dims.origin + Vector3D(0, 0, box.dims.size.z);
+		const Vector3D topRightIn = 
+			btmLeftIn + Vector3D(box.dims.size.x, box.dims.size.y, 1);
+
+		for(const GridCell* cell: sampleCells(gridCells, btmLeftIn, topRightIn))
+			if(!cell->parents.empty())
+				neighbours.insert(cell->parents.front());
+	}
+
+
+	return {neighbours.begin(), neighbours.end()};
+}
+
+// Merge without children
+bool mergeSoft(MeshBox& a, MeshBox& b)
 {
-	const Cuboid& mbDims = child.dims;
+	const Mesh& aConst = a.mesh, bConst = b.mesh;
+	Mesh aTemp(aConst);
+	Mesh bTemp(bConst);
+	
+	if(PMP::does_self_intersect(aTemp))
+		throw std::runtime_error("Mesh A self-intersects!");
+	
+	if(PMP::does_self_intersect(bTemp))
+		throw std::runtime_error("Mesh B self-intersects!");
+	
+	bool success = PMP::corefine_and_compute_union(aTemp, bTemp, aTemp);
+	if(success)
+	{
+		if(INVALID(validate(aTemp, false)))
+			return false;
+
+		const Vector3D A = a.dims.end(), B = b.dims.end();
+		int x = std::min(a.dims.origin.x, b.dims.origin.x);
+		int y = std::min(a.dims.origin.y, b.dims.origin.y);
+		int z = std::min(a.dims.origin.z, b.dims.origin.z);
+		int w = std::max(A.x, B.x) - x;
+		int h = std::max(A.y, B.y) - y;
+		int d = std::max(A.z, B.z) - z;
+		a.dims = Cuboid({x, y, z}, {w, h, d});
+
+		a.mesh = aTemp;
+		recomputeNormals(a);
+	}
+
+	return success;
+}
+
+// No children
+bool mergeSoft(MeshBox& a, MeshBox& b, MeshBox& c)
+{
+	throw std::runtime_error("Function not implemented!");
+	return false;
+}
+
+bool mergeSoft(MeshBox& a, MeshBox& b, Mesh& outMesh, Cuboid& outDims)
+{
+	throw std::runtime_error("Function not implemented!");
+	return false;
+}
+
+void transferChildren(MeshBox& into, MeshBox& from)
+{
+	for(GridCell* child: from.children)
+	{
+		into.children.push_back(child);
+		child->parents.clear();
+		child->parents.push_back(std::addressof(into));
+	}
+
+	from.children.clear();
+}
+
+void assignNormals(Mesh& mesh)
+{
+	auto fnormals = mesh.add_property_map<face_descriptor, K::Vector_3>(
+		"f:normals", CGAL::NULL_VECTOR).first;
+	PMP::compute_face_normals(mesh, fnormals);
+}
+
+void assignNormals(MeshBox& meshBox)
+{
+	assignNormals(meshBox.mesh);
+}
+
+void recomputeNormals(Mesh& mesh)
+{
+	auto oldMap = mesh.property_map<face_descriptor,K::Vector_3>("f:normals");
+	if(oldMap)
+		mesh.remove_property_map(*oldMap);
+
+	assignNormals(mesh);
+}
+
+void recomputeNormals(MeshBox& meshBox)
+{
+	recomputeNormals(meshBox.mesh);
+}
+
+
+MeshErrorSet clipFromMesh(const Grid& grid, const Mesh& mesh, const Cuboid& dims, Mesh& out)
+{
+	MeshErrorSet errors = NO_MESH_ERRORS;
+
 	const K::Point_3& origin = grid.getOrigin();
 	const K::Point_3 meshOrigin(
-		origin.x() + (mbDims.origin.x * grid.getElementSize()),
-		origin.y() + (mbDims.origin.y * grid.getElementSize()),
-		origin.z() + (mbDims.origin.z * grid.getElementSize()));
+		origin.x() + (dims.origin.x * grid.getElementSize()),
+		origin.y() + (dims.origin.y * grid.getElementSize()),
+		origin.z() + (dims.origin.z * grid.getElementSize()));
 	const K::Vector_3 meshSize(
-		mbDims.size.x * grid.getElementSize(),
-		mbDims.size.y * grid.getElementSize(),
-		mbDims.size.z * grid.getElementSize());
+		dims.size.x * grid.getElementSize(),
+		dims.size.y * grid.getElementSize(),
+		dims.size.z * grid.getElementSize());
 	const K::Point_3 meshEnd = meshOrigin + meshSize;
 
 	const CGAL::Iso_cuboid_3<K> bbox(meshOrigin, meshEnd);
 
 	//std::cout << "Clipping using " << meshOrigin << ", " << meshEnd << std::endl;
 
-	child.mesh = mesh;
-	PMP::clip(child.mesh, bbox, CGAL::parameters::clip_volume(true));
+	out = mesh;
+	if(!PMP::clip(out, bbox, CGAL::parameters::clip_volume(true)))
+		SET_MESH_ERROR(errors, MeshErrors::UncertainManifoldness);
 
-	auto fnormals = child.mesh.add_property_map<face_descriptor, K::Vector_3>(
-		"f:normals", CGAL::NULL_VECTOR).first;
-	PMP::compute_face_normals(child.mesh, fnormals);
+	SET_MESH_ERROR(errors, validate(out, false));
+
+	assignNormals(out);
+
+	return errors;
+}
+
+MeshErrorSet clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child)
+{
+	return clipFromMesh(grid, mesh, child.dims, child.mesh);
 }
 
 /*void getUniqueMeshBoxes(

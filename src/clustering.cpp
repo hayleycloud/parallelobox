@@ -219,4 +219,41 @@ std::vector<Cluster> getClusters(int k, const Mesh& mesh, bool useKMeansPP)
 	return clusters;
 }
 
+void verifyClusters(
+	const std::vector<Cluster>& clusters,
+	const K::Point_3& min, const K::Point_3& max)
+{
+	for(const Cluster& cluster: clusters)
+	{
+		const K::Point_3& centroid = cluster.centroid;
+		if(    centroid.x() > min.x() && centroid.x() < max.x()
+			&& centroid.y() > min.y() && centroid.y() < max.y()
+			&& centroid.z() > min.z() && centroid.z() < max.z())
+		{}
+		else 
+			std::cerr << "Cluster centroid (" << centroid << ") "
+				      << "outside of mesh! (min: " << min << ", max: " << max << ")";
+	}
+}
+
+[[nodiscard]]
+std::vector<Cluster> filterVerifiedClusters(
+	const std::vector<Cluster>& clusters,
+	const K::Point_3& min, const K::Point_3& max)
+{
+	std::vector<Cluster> filtered;
+
+	for(const Cluster& cluster: clusters)
+	{
+		const K::Point_3& centroid = cluster.centroid;
+		if(    centroid.x() > min.x() && centroid.x() < max.x()
+			&& centroid.y() > min.y() && centroid.y() < max.y()
+			&& centroid.z() > min.z() && centroid.z() < max.z())
+		{
+			filtered.push_back(cluster);
+		}
+	}
+
+	return filtered;
+}
  

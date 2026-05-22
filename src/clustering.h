@@ -11,4 +11,13 @@ struct Cluster
 [[nodiscard]] std::vector<Cluster> getClusters(
 	int k, const Mesh& mesh, bool useKMeansPP = true);
 
+void verifyClusters(
+	const std::vector<Cluster>& clusters,
+	const K::Point_3& min, const K::Point_3& max);
+
+[[nodiscard]]
+std::vector<Cluster> filterVerifiedClusters(
+	const std::vector<Cluster>& clusters,
+	const K::Point_3& min, const K::Point_3& max);
+
  

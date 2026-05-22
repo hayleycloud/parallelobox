@@ -62,37 +62,37 @@ const K::Iso_cuboid_3& Grid::get(const Coord& coord) const
 	return m_Grid[getOffset(coord.x, coord.y, coord.z)];
 }
 
-void Grid::clipVolume(Mesh& mesh, std::vector<Mesh>& outMeshes) const
+void Grid::clipVolume(const Mesh& mesh, std::vector<Mesh>& outMeshes) const
 {
 	clip(mesh, outMeshes, true);
 }
 
-void Grid::clipVolume(Mesh& mesh, size_t x, size_t y, size_t z) const
+bool Grid::clipVolume(Mesh& mesh, size_t x, size_t y, size_t z) const
 {
-	clip(mesh, x, y, z, true);
+	return clip(mesh, x, y, z, true);
 }
 
-void Grid::clipVolume(Mesh& mesh, const Coord& coord) const
+bool Grid::clipVolume(Mesh& mesh, const Coord& coord) const
 {
-	clip(mesh, coord.x, coord.y, coord.z, true);
+	return clip(mesh, coord.x, coord.y, coord.z, true);
 }
 
-void Grid::clipSurface(Mesh& mesh, std::vector<Mesh>& outMeshes) const
+void Grid::clipSurface(const Mesh& mesh, std::vector<Mesh>& outMeshes) const
 {
 	clip(mesh, outMeshes, false);
 }
 
-void Grid::clipSurface(Mesh& mesh, size_t x, size_t y, size_t z) const
+bool Grid::clipSurface(Mesh& mesh, size_t x, size_t y, size_t z) const
 {
-	clip(mesh, x, y, z, false);
+	return clip(mesh, x, y, z, false);
 }
 
-void Grid::clipSurface(Mesh& mesh, const Coord& coord) const
+bool Grid::clipSurface(Mesh& mesh, const Coord& coord) const
 {
-	clip(mesh, coord.x, coord.y, coord.z, false);
+	return clip(mesh, coord.x, coord.y, coord.z, false);
 }
 
-void Grid::clip(Mesh& mesh, std::vector<Mesh>& outMeshes, bool fill) const
+void Grid::clip(const Mesh& mesh, std::vector<Mesh>& outMeshes, bool fill) const
 {
 	outMeshes.resize(m_NumBoxesX * m_NumBoxesY * m_NumBoxesZ);
 
@@ -111,11 +111,8 @@ void Grid::clip(Mesh& mesh, std::vector<Mesh>& outMeshes, bool fill) const
 	}
 }
 
-void Grid::clip(Mesh& mesh, size_t x, size_t y, size_t z, bool fill) const
+bool Grid::clip(Mesh& mesh, size_t x, size_t y, size_t z, bool fill) const
 {
-	const K::Iso_cuboid_3& bbox = get(x, y, z);
-	//std::cout << bbox << std::endl;
-	PMP::clip(mesh, bbox, CGAL::parameters::clip_volume(fill));
+	return PMP::clip(mesh, get(x, y, z), CGAL::parameters::clip_volume(fill));
 }
 
- 

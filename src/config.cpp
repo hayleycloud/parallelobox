@@ -86,6 +86,7 @@ PrinterSpec makePrinterSpec(const INIFile& iniFile)
 		const INIFile::Section& speed = iniFile.sections.at("speed");
 		const std::string& shellSpeed = speed.at("shell");
 		const std::string& infillSpeed = speed.at("infill");
+		const std::string& supportSpeed = speed.at("support");
 
 		std::stringstream ss1("");
 		ss1 << shellSpeed;
@@ -94,6 +95,10 @@ PrinterSpec makePrinterSpec(const INIFile& iniFile)
 		std::stringstream ss2("");
 		ss2 << infillSpeed;
 		ss2 >> spec.infillSpeed;
+
+		std::stringstream ss3("");
+		ss3 << supportSpeed;
+		ss3 >> spec.supportSpeed;
 	} catch(std::exception ex) {
 		throw std::runtime_error("Error loading printer config: \"speeds\"");
 	}
@@ -150,6 +155,7 @@ void printUsage() {
 	std::cout << "  --printer <file>        Load printer settings from <file>." << std::endl;
 	std::cout << "                          [default: \"printers/default.ini\"]." << std::endl;
 	std::cout << "  --infill <rate>         Infill rate (1.0 = 100%, 0.5 = 50%)." << std::endl;
+	std::cout << "  --support <density>     Support density (1.0 = 100%, 0.5 = 50%)." << std::endl;
 	std::cout << "  --skip-symmetry         Skip the initial symmetry partition." << std::endl;
 	std::cout << "  --sample-tries          Number of times to try km++ seeding." << std::endl;
 	std::cout << "  --clean-out             Remove intermediates from output dir." << std::endl;
@@ -226,6 +232,12 @@ void printUsage() {
 		infillRate = *infillRateArg;
 	config.infillRate = infillRate;
 
+	float supportDensity = 0.5;		// 20% as default
+	auto supportDensityArg = args.getFloat("--support");
+	if(supportDensityArg)
+		supportDensity = *supportDensityArg;
+	config.supportDensity = supportDensity;
+
 	config.seed = args.getInt("--seed");
 
 	auto symmetrySkipArg = args.getFlag("--skip-symmetry");
@@ -277,11 +289,15 @@ void printConfig(const Config& config)
 		      << printer.shellSpeed << " mm/s" << std::endl;
 	std::cout << "    Infill speed: " 
 		      << printer.infillSpeed << " mm/s" << std::endl;
+	std::cout << "    Support speed: " 
+		      << printer.supportSpeed << " mm/s" << std::endl;
 
 	std::cout << "    Overhang tolerance: " 
 		      << printer.overhangTolerance << "°" << std::endl;
 
 	std::cout << "Infill rate: " << config.infillRate * 100 << "\%" << std::endl;
+	
+	std::cout << "Support density: " << config.supportDensity * 100 << "\%" << std::endl;
 
 	int numBoxes = static_cast<int>(1.0 / config.granularityScale);
 	std::cout << "Number of initial boxes: ~" << numBoxes << std::endl;
@@ -289,6 +305,9 @@ void printConfig(const Config& config)
 	std::cout << "Number of sample attempts: " << config.sampleTries << std::endl;
 
 	std::cout << "Number of printers: " << config.numPrinters << std::endl;
+
+	if(config.seed)
+		std::cout << "Seed: " << *config.seed << std::endl;
 
 	std::cout << "Flags:" << std::endl;
 	if(config.symmetrySkip)

@@ -6,7 +6,8 @@
 extern std::random_device randDev;
 extern std::mt19937 randEng;
 
-void initRandom(std::optional<unsigned int> seed);
+typedef unsigned int Seed;
+Seed initRandom(std::optional<Seed> seed);
 
 template<class T>
 using RNGReal = std::uniform_real_distribution<T>;

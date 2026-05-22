@@ -11,6 +11,7 @@ struct PrinterSpec
 
 	double shellSpeed;
 	double infillSpeed;
+	double supportSpeed;
 
 	double overhangTolerance;
 };
@@ -29,6 +30,7 @@ struct Config
 	double granularityScale;
 
 	double infillRate;
+	double supportDensity;
 
 	double proximityFactor;
 

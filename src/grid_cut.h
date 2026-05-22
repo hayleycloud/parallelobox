@@ -28,17 +28,17 @@ public:
 
 	[[nodiscard]] const K::Iso_cuboid_3& get(const Coord& coord) const;
 
-	void clipVolume(Mesh& mesh, std::vector<Mesh>& outMeshes) const;
+	void clipVolume(const Mesh& mesh, std::vector<Mesh>& outMeshes) const;
 
-	void clipVolume(Mesh& mesh, size_t x, size_t y, size_t z) const;
+	bool clipVolume(Mesh& mesh, size_t x, size_t y, size_t z) const;
 
-	void clipVolume(Mesh& mesh, const Coord& coord) const;
+	bool clipVolume(Mesh& mesh, const Coord& coord) const;
 
-	void clipSurface(Mesh& mesh, std::vector<Mesh>& outMeshes) const;
+	void clipSurface(const Mesh& mesh, std::vector<Mesh>& outMeshes) const;
 
-	void clipSurface(Mesh& mesh, size_t x, size_t y, size_t z) const;
+	bool clipSurface(Mesh& mesh, size_t x, size_t y, size_t z) const;
 
-	void clipSurface(Mesh& mesh, const Coord& coord) const;
+	bool clipSurface(Mesh& mesh, const Coord& coord) const;
 
 private:
 	const double m_Width, m_Height, m_Depth;
@@ -50,9 +50,9 @@ private:
 
 	size_t getOffset(size_t x, size_t y, size_t z) const;
 
-	void clip(Mesh& mesh, std::vector<Mesh>& outMeshes, bool fill) const;
+	void clip(const Mesh& mesh, std::vector<Mesh>& outMeshes, bool fill) const;
 
-	void clip(Mesh& mesh, size_t x, size_t y, size_t z, bool fill) const;
+	bool clip(Mesh& mesh, size_t x, size_t y, size_t z, bool fill) const;
 };
 
  

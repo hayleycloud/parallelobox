@@ -45,19 +45,24 @@ void getSurfaceBoxes(
 	const Grid& grid,
 	mv::vector3<GridCell>& gridCells, 
 	int numPrinters);
-	//std::vector<std::unique_ptr<MeshBox>>& meshBoxes);
-
-/*void getChildrenFromSide(
-	mv::vector3<GridCell>& gridCells, 
-	MeshBox* meshBox, 
-	std::vector<GridCell*>& children, 
-	int sideIndex);*/
 
 Cuboid getDimsFrom(const std::vector<const GridCell*>& children);
 
 Cuboid getDimsFrom(std::vector<GridCell*>& children);
 
-void clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child);
+std::vector<GridCell*> sampleCells(
+	mv::vector3<GridCell>& gridCells,
+	const Vector3D& a, const Vector3D& b);
+
+MeshErrorSet clipFromMesh(const Grid& grid, const Mesh& mesh, const Cuboid& dims, Mesh& out);
+
+MeshErrorSet clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child);
+
+void assignNormals(Mesh& mesh);
+
+void assignNormals(MeshBox& meshBox);
+
+void recomputeNormals(MeshBox& meshBox);
 
 void resetGridCells(mv::vector3<GridCell>& gridCells);
 
@@ -67,29 +72,18 @@ void getFloorVectorsFrom(
 	const std::vector<Direction>& upDirections,
 	std::vector<K::Vector_3>& floors);
 
-/*void getUniqueMeshBoxes(
-	mv::vector3<GridCell>& gridCells, 
-	std::vector<MeshBox*>& meshBoxes,
-	int sideIndex);
-
-void extractUniqueMeshBoxes(
+std::vector<MeshBox*> getNeighbours(
 	const Grid& grid,
-	mv::vector3<GridCell>& gridCells,
-	const Mesh& parentMesh,
-	std::vector<std::unique_ptr<MeshBox>>& meshBoxes,
-	int sideIndex);
+	const MeshBox& box,
+	mv::vector3<GridCell>& gridCells);
 
-void clearMeshBoxChanges(MeshBox& meshbox);
+bool mergeSoft(MeshBox& a, MeshBox& b);
 
-void clearMeshBoxChildren(MeshBox& meshbox);
+bool mergeSoft(MeshBox& a, MeshBox& b, MeshBox& c);
 
-void assignParents(mv::vector3<GridCell>& gridCells, int sideIndex);
+bool mergeSoft(MeshBox& a, MeshBox& b, Cuboid& outDims);
 
-[[nodiscard]]
-size_t numParents(mv::vector3<GridCell>& gridCells, int sideIndex);
+bool mergeSoft(MeshBox& a, MeshBox& b, Mesh& outMesh, Cuboid& outDims);
 
-void printParents(mv::vector3<GridCell>& gridCells);
+void transferChildren(MeshBox& into, MeshBox& from);
 
-void printParents(mv::vector3<GridCell>& gridCells, int sideIndex);
-*/
- 

@@ -4,16 +4,44 @@
 
 int calcMinNumPrinters(const Config& config, const Mesh& mesh)
 {
-	double meshVolume = PMP::volume(mesh);
-	double printerVolume = 
-		config.printer.volume.width * 
-		config.printer.volume.height * 
-		config.printer.volume.depth;
+	// TODO: Descending dimensional comparison
+	K::Point_3 min, max;
+	bounds(mesh, min, max);
 
-	std::cout << "MVol: " << meshVolume << std::endl;
-	std::cout << "PVol: " << printerVolume << std::endl;
+	K::Vector_3 dims = max - min;
 
-	return static_cast<int>(meshVolume / printerVolume);
+	std::list<double> sortedMeshDims;
+	sortedMeshDims.push_back(dims.x());
+	sortedMeshDims.push_back(dims.y());
+	sortedMeshDims.push_back(dims.z());
+	sortedMeshDims.sort();
+
+	std::list<double> sortedPrinterDims;
+	sortedPrinterDims.push_back(config.printer.volume.width);
+	sortedPrinterDims.push_back(config.printer.volume.height);
+	sortedPrinterDims.push_back(config.printer.volume.depth);
+	sortedPrinterDims.sort();
+
+	int numPrinters = 1;
+	auto meshDimItr = sortedMeshDims.begin();
+	auto printDimItr = sortedPrinterDims.begin();
+	while(meshDimItr != sortedMeshDims.end() && printDimItr != sortedPrinterDims.end())
+	{
+		numPrinters *= std::ceil(*meshDimItr / *printDimItr);
+		++meshDimItr;
+		++printDimItr;
+	}
+	return numPrinters;
+
+	/*double smallestPrinterDim = std::min(
+		config.printer.volume.width, std::min(
+			config.printer.volume.height, 
+			config.printer.volume.depth));
+	double largestMeshDim = std::max(dims.x(), std::max(dims.y(), dims.z()));
+
+	int printersPerDim = std::ceil(largestMeshDim / smallestPrinterDim);
+
+	return printersPerDim * printersPerDim * printersPerDim;*/
 }
 
 double overhangCost(
@@ -23,7 +51,8 @@ double overhangCost(
 	const K::Vector_3& up,
 	const K::Vector_3& floor)
 {
-	return overhangArea(config, mesh, fnormals, up, floor);
+	double supportVolume = overhangVolume(config, mesh, fnormals, up, floor);
+	return (config.supportDensity * supportVolume) / config.printer.supportSpeed;
 }
 
 double printingCost(const Config& config, const Mesh& mesh)
@@ -31,7 +60,6 @@ double printingCost(const Config& config, const Mesh& mesh)
 	const double volumeCost = PMP::volume(mesh) / config.printer.infillSpeed; 
 	const double surfaceCost = PMP::area(mesh) / config.printer.shellSpeed;
 	// TODO: squared_face_area for improved performance?
-	//DEBUG_EXEC(std::cout << "V: " << volumeCost << ", SA: " << surfaceCost << " = " << volumeCost + surfaceCost << std::endl);
 	return volumeCost + surfaceCost;
 }
 
@@ -51,6 +79,15 @@ bool fitsVolume(
 	return false;
 }
 
+bool fitsVolume(const Config& config, double width, double height, double depth)
+{
+	double biggest = std::max(width, std::max(height, depth));
+	double smallest = 
+		std::min(config.printer.volume.width, std::min(
+				config.printer.volume.height, config.printer.volume.depth));
+	return biggest <= smallest;
+}
+
 std::vector<Direction> calcOrientationsThatFit(const Config& config, const Mesh& mesh)
 {
 	K::Point_3 min, max;
@@ -59,6 +96,18 @@ std::vector<Direction> calcOrientationsThatFit(const Config& config, const Mesh&
 	const double width  = abs(max.x() - min.x());
 	const double height = abs(max.y() - min.y());
 	const double depth  = abs(max.z() - min.z());
+
+	if(fitsVolume(config, width, height, depth))
+	{
+		return {
+			Direction::Left, Direction::Right,
+			Direction::Up, Direction::Down,
+			Direction::In, Direction::Out
+		};
+	}
+	else {
+		return {};
+	}
 
 	const double allowedWidth = config.printer.volume.width;
 	const double allowedHeight = config.printer.volume.height;
@@ -98,27 +147,12 @@ bool fitsVolume(const Config& config, const Mesh& mesh)
 	return !calcOrientationsThatFit(config, mesh).empty();
 }
 
-/*double fitness(const Config& config, const Mesh& mesh)
+double computeBestOverhangCost(
+	const Config& config, 
+	const Grid& grid, 
+	const std::vector<Direction>& allowedUpDirs,
+	const MeshBox& meshBox)
 {
-	const double printCost = printingCost(config, mesh);
-	if(printCost == 0.0)
-		return 0.0;
-
-	const double fitVolumeCost = fitsVolume(config, mesh);
-
-	return printCost + fitVolumeCost;
-}*/
-
-double printingCost(const Config& config, const Grid& grid, const MeshBox& meshBox)
-{
-	std::vector<Direction> allowedUpDirs = 
-		calcOrientationsThatFit(config, meshBox.mesh);
-
-	double simplePrintingCost = printingCost(config, meshBox.mesh);
-
-	// Calculate best orientation overhang
-	///////////////////////////////////////////////////////////////////////////
-
 	auto nmap = meshBox.mesh.property_map<face_descriptor,K::Vector_3>("f:normals");
 	auto fnormals = *nmap;
 	
@@ -145,6 +179,22 @@ double printingCost(const Config& config, const Grid& grid, const MeshBox& meshB
 			bestOverhangCost = cost;
 	}
 
+	return bestOverhangCost;
+}
+
+double printingCost(
+	const Config& config, 
+	const Grid& grid, 
+	const MeshBox& meshBox)
+{
+	std::vector<Direction> allowedUpDirs = 
+		calcOrientationsThatFit(config, meshBox.mesh);
+
+	double simplePrintingCost = printingCost(config, meshBox.mesh);
+
+	double overhangCost = computeBestOverhangCost(
+		config, grid, allowedUpDirs, meshBox);
+
 	/*int x;
 	if(rand() % 100 == 0)
 	{
@@ -158,16 +208,76 @@ double printingCost(const Config& config, const Grid& grid, const MeshBox& meshB
 		std::cin >> x;
 	}*/
 
-	return std::abs(simplePrintingCost + bestOverhangCost);
+	return std::abs(simplePrintingCost + overhangCost);
 }
 
-double fullScore(const Config& config, const std::vector<const Mesh*>& printers)
+void pruneCache(
+	const std::vector<const MeshBox*>& meshBoxPtrs,
+	PrintingCostCache& cache)
 {
-	double highestCost = std::numeric_limits<double>::min();
-
-	for(const Mesh* mesh: printers)
+	std::vector<const MeshBox*> deadEntries;
+	for(auto& cacheEntry: cache)
 	{
-		double printCost = printingCost(config, *mesh);
+		if(std::find(meshBoxPtrs.cbegin(), meshBoxPtrs.cend(), cacheEntry.first) == meshBoxPtrs.cend())
+			deadEntries.push_back(cacheEntry.first);
+	}
+
+	for(const MeshBox* dead: deadEntries)
+		cache.erase(dead);
+}
+
+void pruneCache(
+	const std::vector<std::unique_ptr<MeshBox>>& meshBoxes,
+	PrintingCostCache& cache)
+{
+	std::vector<const MeshBox*> mbPtrs;
+	mbPtrs.reserve(meshBoxes.size());
+	for(auto& meshBox: meshBoxes)
+		mbPtrs.push_back(meshBox.get());
+	pruneCache(mbPtrs, cache);
+}
+
+inline double computePrintingCostAndCache(
+	const Config& config, 
+	const Grid& grid, 
+	const MeshBox& meshBox,
+	PrintingCostCache& cache)
+{
+	double printCost = printingCost(config, grid, meshBox);
+	cache.insert_or_assign(
+		std::addressof(meshBox), 
+		(PrintingCostCacheData) { meshBox.dims, printCost });
+	return printCost;
+}
+
+double printingCost(
+	const Config& config, 
+	const Grid& grid, 
+	const MeshBox& meshBox,
+	PrintingCostCache& cache)
+{
+	const MeshBox* mbPtr = std::addressof(meshBox);
+	auto cacheEntry = cache.find(mbPtr);
+	if(cacheEntry == cache.end())
+		return computePrintingCostAndCache(config, grid, meshBox, cache);
+
+	if(cacheEntry->second.lastDims == meshBox.dims)
+		return cacheEntry->second.printCost;
+
+	return computePrintingCostAndCache(config, grid, meshBox, cache);
+}
+
+double parallelPrintingCost(
+	const Config& config, 
+	const Grid& grid, 
+	const std::vector<const MeshBox*>& printers,
+	PrintingCostCache& cache)
+{
+	double highestCost = std::numeric_limits<double>::lowest();
+
+	for(const MeshBox* mesh: printers)
+	{
+		double printCost = printingCost(config, grid, *mesh, cache);
 		if(printCost > highestCost)
 			highestCost = printCost;
 	}

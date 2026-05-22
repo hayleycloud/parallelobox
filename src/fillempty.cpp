@@ -1,7 +1,8 @@
 #include "fillempty.h"
+#include "regiongrowth.h"
 
 
-std::vector<const GridCell*> sampleCells(
+/*std::vector<const GridCell*> sampleCells(
 	const mv::vector3<GridCell>& gridCells,
 	const Vector3D& a, const Vector3D& b)
 {
@@ -23,7 +24,25 @@ std::vector<const GridCell*> sampleCells(
 	return cells;
 }
 
+[[nodiscard]] K::Vector_3 cubeInReal(const Grid& grid, const Cuboid& cube)
+{
+	double elementSize = grid.getElementSize();
+	return {
+		cube.size.x * elementSize,
+		cube.size.y * elementSize,
+		cube.size.z * elementSize
+	};
+}
+
+[[nodiscard]] bool doesCubeFit(
+	const Config& config, const Grid& grid, const Cuboid& cube)
+{
+	K::Vector_3 realDims = cubeInReal(grid, cube);
+	return fitsVolume(config, realDims.x(), realDims.y(), realDims.z());
+}
+
 [[nodiscard]] std::vector<const GridCell*> expandCube(
+	const Config& config,
 	Direction direction, 
 	const Grid& grid,
 	const mv::vector3<GridCell>& gridCells, 
@@ -48,6 +67,9 @@ std::vector<const GridCell*> sampleCells(
 			--cube.origin.x;
 			++cube.size.x;
 
+			if(!doesCubeFit(config, grid, cube))
+				return {};
+
 			return sampleCells(gridCells, btmLeftOut, topLeftIn);
 		}
 		break;                                                      
@@ -64,6 +86,9 @@ std::vector<const GridCell*> sampleCells(
 				return {};
 
 			++cube.size.x;
+
+			if(!doesCubeFit(config, grid, cube))
+				return {};
 
 			return sampleCells(gridCells, btmRightOut, topRightIn);
 		}
@@ -84,6 +109,9 @@ std::vector<const GridCell*> sampleCells(
 			--cube.origin.y;
 			++cube.size.y;
 
+			if(!doesCubeFit(config, grid, cube))
+				return {};
+
 			return sampleCells(gridCells, btmLeftOut, btmRightIn);
 		}
 		break;
@@ -100,6 +128,9 @@ std::vector<const GridCell*> sampleCells(
 				return {};
 
 			++cube.size.y;
+
+			if(!doesCubeFit(config, grid, cube))
+				return {};
 
 			return sampleCells(gridCells, topLeftOut, topRightIn);
 		}
@@ -120,6 +151,9 @@ std::vector<const GridCell*> sampleCells(
 			--cube.origin.z;
 			++cube.size.z;
 
+			if(!doesCubeFit(config, grid, cube))
+				return {};
+
 			return sampleCells(gridCells, btmLeftOut, topRightOut);
 		}
 		break;
@@ -136,6 +170,9 @@ std::vector<const GridCell*> sampleCells(
 				return {};
 
 			++cube.size.z;
+
+			if(!doesCubeFit(config, grid, cube))
+				return {};
 
 			return sampleCells(gridCells, btmLeftIn, topRightIn);
 		}
@@ -175,6 +212,7 @@ bool isValidEmptyRegion(
 
 bool expandInDirection(
 	Direction direction,
+	const Config& config,
 	const Grid& grid, 
 	const mv::vector3<GridCell>& gridCells,
 	Cuboid& cube,
@@ -182,7 +220,7 @@ bool expandInDirection(
 	std::vector<const GridCell*>& newEmptyCells)
 {
 	std::vector<const GridCell*> newCells = 
-		expandCube(direction, grid, gridCells, cube);
+		expandCube(config, direction, grid, gridCells, cube);
 
 	if(!isValidEmptyRegion(allEmptyCells, newCells))
 		return false;
@@ -202,6 +240,7 @@ void updateEmptyCellLog(
 }
 
 bool getNeighbouringEmptyCells(
+	const Config& config,
 	const Vector3D& position,
 	const Grid& grid, 
 	const mv::vector3<GridCell>& gridCells,
@@ -235,6 +274,7 @@ bool getNeighbouringEmptyCells(
 
 			bool valid = expandInDirection(
 				direction,
+				config,
 				grid, gridCells, 
 				cube, 
 				allEmptyCells, newEmptyCells);
@@ -259,10 +299,11 @@ bool getNeighbouringEmptyCells(
 }
 
 bool calcDiscreteRegions(
+	const Config& config,
 	const Grid& grid, 
 	mv::vector3<GridCell>& gridCells, 
-	int numAvailablePrinters,
-	std::vector<std::vector<const GridCell*>>& regions)
+	std::vector<std::vector<const GridCell*>>& regions,
+	int numAvailablePrinters)
 {
 	std::set<const GridCell*> allEmptyCells;
 
@@ -270,7 +311,9 @@ bool calcDiscreteRegions(
 	std::cout << "Finding empty regions... " << std::flush;
 #endif
 
-	for(int itr = 0; itr < numAvailablePrinters; ++itr)
+	int limit = numAvailablePrinters > 0 
+		? numAvailablePrinters : std::numeric_limits<int>::max();
+	for(int itr = 0; itr < limit; ++itr)
 	{
 		std::set<const GridCell*> emptyCells;
 
@@ -298,7 +341,7 @@ bool calcDiscreteRegions(
 		}
 
 		getNeighbouringEmptyCells(
-			seedPos, grid, gridCells, emptyCells, allEmptyCells);
+			config, seedPos, grid, gridCells, emptyCells, allEmptyCells);
 		for(const GridCell* cell: emptyCells)
 			allEmptyCells.insert(cell);
 		regions.emplace_back(std::vector<const GridCell*>(emptyCells.cbegin(), emptyCells.cend()));
@@ -327,20 +370,208 @@ bool calcDiscreteRegions(
 }
 
 bool getDiscreteEmptyRegions(
+	const Config& config,
 	const Grid& grid,
 	mv::vector3<GridCell>& gridCells,
 	int numAvailablePrinters,
 	std::vector<Cuboid>& emptyRegions)
 {
-
 	std::vector<std::vector<const GridCell*>> regionCells;
-	if(!calcDiscreteRegions(grid, gridCells, numAvailablePrinters, regionCells))
-		return false;
+	bool valid = calcDiscreteRegions(
+		config, grid, gridCells, regionCells, numAvailablePrinters);
 
 	for(const auto& region: regionCells)
 		emptyRegions.emplace_back(getDimsFrom(region));
 
+	return valid;
+}
+
+int getDiscreteEmptyRegions(
+	const Config& config,
+	const Grid& grid,
+	mv::vector3<GridCell>& gridCells,
+	std::vector<Cuboid>& emptyRegions)
+{
+	std::vector<std::vector<const GridCell*>> regionCells;
+	bool valid = calcDiscreteRegions(config, grid, gridCells, regionCells, 0);
+
+	for(const auto& region: regionCells)
+		emptyRegions.emplace_back(getDimsFrom(region));
+
+	return valid ? regionCells.size() : -1;
+}*/
+
+
+[[nodiscard]] double computeEmptyFillCost(
+	const Config& config,
+	const Mesh& parent,
+	double currentPrintCost,
+	Direction direction, 
+	const MeshBox& region,
+	const Grid& grid,
+	mv::vector3<GridCell>& gridCells,
+	PrintingCostCache& printCostCache)
+{
+	// REMEMBER: Lower is better, negative not allowed
+	
+	// Grow and Test for Constraint Violations
+	///////////////////////////////////////////////////////////////////////////
+	
+	std::optional<Cuboid> newRegion = 
+		safeExpand(direction, region.dims, grid, gridCells);
+	if(!newRegion)
+		return -1.0;
+
+	// Compute new MeshBox
+	///////////////////////////////////////////////////////////////////////////
+	
+	MeshBox newMeshBox(*newRegion);
+
+	if(INVALID(clipFromMesh(grid, parent, newMeshBox)))
+		return -1.0;
+	
+	// Printability Constraint
+	///////////////////////////////////////////////////////////////////////////
+	
+	if(!fitsVolume(config, newMeshBox.mesh))
+	{
+#ifdef VERBOSE
+		std::cout << "\tGrowth " << toText(direction) << " does not fit volume" << std::endl;
+#endif
+		return -1.0;
+	}
+
+	// Standard Objective
+	///////////////////////////////////////////////////////////////////////////
+	// This accounts for core printing cost + minimal support structure print costs
+	double printCost = printingCost(config, grid, newMeshBox, printCostCache);
+	double dPrintCost = printCost - currentPrintCost;
+
+	// Application of standard objective
+	///////////////////////////////////////////////////////////////////////////
+
+	double score = dPrintCost;
+#ifdef VERBOSE
+	std::cout << "\t\tScore for " << toText(direction)
+			  << " = " << dPrintCost  << std::endl;
+#endif
+
+	return score;
+}
+
+bool growBoxIfPossible(
+	const Config& config,
+	const Mesh& parent,
+	MeshBox& targetBox,
+	double currentPrintCost,
+	mv::vector3<GridCell>& gridCells,
+	const Grid& grid,
+	PrintingCostCache& printCostCache)
+{
+#ifdef VERBOSE
+	std::cout << "\tComputing cost for " << std::addressof(targetBox)
+	          << " " << targetBox.dims
+	          << ":" << std::endl;
+#endif
+
+	const std::array<Direction,6> directions = {
+		Direction::Left, Direction::Right,
+		Direction::Up, Direction::Down,
+		Direction::In, Direction::Out
+	};
+	std::unordered_map<Direction,double> costs;
+	for(Direction direction: directions)
+		costs[direction] = -1.0;
+
+	#pragma omp parallel for default(none) shared(directions, costs, config, parent, currentPrintCost, targetBox, grid, gridCells, printCostCache)
+	for(Direction direction: directions)
+	{
+		costs[direction] = computeEmptyFillCost(
+			config, parent,
+			currentPrintCost,
+			direction,
+			targetBox, 
+			grid, gridCells,
+			printCostCache);
+	}
+
+	std::optional<Direction> bestDirection = getBestDirection(costs);
+	if(!bestDirection)
+	{
+#ifdef VERBOSE
+		std::cout << "\tNo possible directions detected." << std::endl;
+#endif
+		return false;
+	}
+
+#ifdef VERBOSE
+	std::cout << "\tBest Cost: " << toText(*bestDirection)
+			  << " = " << costs[*bestDirection] << std::endl;
+#endif
+	grow(*bestDirection, parent, grid, gridCells, targetBox);
+
 	return true;
 }
 
- 
+std::optional<Vector3D> findEmptyBoundarySpace(mv::vector3<GridCell>& gridCells)
+{
+	std::optional<Vector3D> seedPos = std::nullopt;
+	mv::forEachIndexed<GridCell>([&](const GridCell& cell, int x, int y, int z) {
+		if(!seedPos && cell.type == GridCell::ContentType::Boundary && cell.parents.empty())
+			seedPos = Vector3D(x, y, z);
+	}, gridCells);
+	return seedPos;
+}
+
+std::unique_ptr<MeshBox> fillEmptyBoundarySpace(
+	const Config& config,
+	const Mesh& mesh,
+	const Vector3D& from,
+	double currentParallelCost,
+	const Grid& grid, 
+	mv::vector3<GridCell>& gridCells,
+	PrintingCostCache& printCostCache)
+{
+	GridCell& source = mv::get(gridCells, from.x, from.y, from.z);
+	std::unique_ptr<MeshBox> meshBox = std::make_unique<MeshBox>((MeshBox){
+		source.mesh,
+		Cuboid(from, Vector3D(1, 1, 1)),
+		{std::addressof(source)}});
+	source.parents.clear();
+	source.parents.push_back(meshBox.get());
+
+	double currentPrintCost = printingCost(config, grid, *meshBox, printCostCache);
+	while(growBoxIfPossible(
+		config, mesh, *meshBox, currentPrintCost, gridCells, grid, printCostCache))
+	{
+		currentPrintCost = printingCost(config, grid, *meshBox, printCostCache);
+	}
+
+	return std::move(meshBox);
+}
+
+bool fillEmptyBoundarySpaces(
+	const Config& config,
+	const Mesh& mesh,
+	std::vector<std::unique_ptr<MeshBox>>& outMeshBoxes,
+	double currentParallelCost,
+	const Grid& grid, 
+	mv::vector3<GridCell>& gridCells,
+	PrintingCostCache& printCostCache)
+{
+	//std::cout << "Filling empty regions... " << std::endl;
+
+	std::optional<Vector3D> found = findEmptyBoundarySpace(gridCells);
+	while(found)
+	{
+		outMeshBoxes.emplace_back(fillEmptyBoundarySpace(
+			config, mesh, 
+			*found, 
+			currentParallelCost, 
+			grid, gridCells, 
+			printCostCache));
+		found = findEmptyBoundarySpace(gridCells);
+	}
+
+	return true;
+}

@@ -2,6 +2,16 @@
 #include "symmetry.h"
 #include <limits>
 
+#define OVERHANG_ALG_DEEP	1
+#define OVERHANG_ALG_FAST	2
+#define OVERHANG_ALG_VFAST	3
+
+#ifndef OVERHANG_LOGIC
+#define OVERHANG_ALGORITHM OVERHANG_ALG_FAST
+#endif
+
+constexpr double EPS = 0.000001;
+
 void bounds(const Mesh& mesh, K::Point_3& min, K::Point_3& max)
 {
 	constexpr double minDbl = -std::numeric_limits<double>::max();
@@ -62,48 +72,235 @@ void boundsLocal(const Mesh& mesh, K::Point_3& min, K::Point_3& max)
 bool isFloor(
 	const Mesh& mesh, const face_descriptor& fd, const K::Vector_3& floor)
 {
-	constexpr double eps = 0.0001;
-
-	// TODO: *All* vertices must be on floor for face to be floor
+	bool floorState = true;
 
 	for(Mesh::Vertex_index vIndex: CGAL::vertices_around_face(
 		mesh.halfedge(fd), mesh))
 	{
 		const auto& vertex = mesh.point(vIndex);
 
-		if(floor.x() < -eps || floor.x() > eps)
-			return std::abs(vertex.x() - floor.x()) <= eps;
-		else if(floor.y() < -eps || floor.y() > eps)
-			return std::abs(vertex.y() - floor.y()) <= eps;
-		else if(floor.z() < -eps || floor.z() > eps)
-			return std::abs(vertex.z() - floor.z()) <= eps;
+		if(floor.x() < -EPS || floor.x() > EPS)
+			floorState &= std::abs(vertex.x() - floor.x()) <= EPS;
+		else if(floor.y() < -EPS || floor.y() > EPS)
+			floorState &= std::abs(vertex.y() - floor.y()) <= EPS;
+		else if(floor.z() < -EPS || floor.z() > EPS)
+			floorState &= std::abs(vertex.z() - floor.z()) <= EPS;
 	}
 
-	return false;
+	return floorState;
 }
 
-double overhangArea(
+double raycast(
+	//const Mesh::Vertex_index& fromIndex,
+	const K::Point_3& from,
+	const K::Direction_3& to, 
+	const face_descriptor& srcFace, 
+	const Mesh& mesh)
+{
+	//const K::Point_3 from = mesh.point(fromIndex);
+	const K::Ray_3 ray(from, to);
+	double smallestD = std::numeric_limits<double>::max();
+	for(face_descriptor fd: faces(mesh))
+	{
+		bool dup = false;
+		std::vector<K::Point_3> pts;
+		for(Mesh::Vertex_index vIndex: CGAL::vertices_around_face(
+			mesh.halfedge(fd), mesh))
+		{
+			//if(vIndex == fromIndex)
+			//{
+			//	dup = true;
+			//	break;
+			//}
+			pts.push_back(mesh.point(vIndex));
+		}
+		//if(dup)
+		//	continue;
+
+		K::Triangle_3 face(pts[0], pts[1], pts[2]);
+		if(face.is_degenerate())
+			continue;
+
+		auto result = CGAL::intersection(ray, face);
+		if(result)
+		{
+			if(const K::Point_3* p = std::get_if<K::Point_3>(&*result))
+			{
+				K::Vector_3 d(from, *p);
+				//std::cout << from << " -> " << *p << " = " << std::sqrt(d.squared_length()) << std::endl;
+				double l = d.squared_length();
+				if(l > EPS && l < smallestD)
+					smallestD = l;
+			}
+		}
+
+	}
+
+	return smallestD;		// Squared Length
+}
+
+double distToFloor(const K::Point_3& from, const K::Vector_3& floor)
+{
+	if(floor.x() < -EPS || floor.x() > EPS)
+		return std::abs(from.x() - floor.x());
+	else if(floor.y() < -EPS || floor.y() > EPS)
+		return std::abs(from.y() - floor.y());
+	else if(floor.z() < -EPS || floor.z() > EPS)
+		return std::abs(from.z() - floor.z());
+	return -1.0;
+}
+
+double fastOverhangDistance(
+	const Mesh& mesh, 
+	const face_descriptor& fd, 
+	const K::Direction_3& down,
+	const K::Vector_3& floor)
+{
+	double x = 0.0, y = 0.0, z = 0.0;
+	for(Mesh::Vertex_index vIndex: CGAL::vertices_around_face(
+		mesh.halfedge(fd), mesh))
+	{
+		const K::Point_3& vertex = mesh.point(vIndex);
+		x += vertex.x();
+		y += vertex.y();
+		z += vertex.z();
+	}
+
+	K::Point_3 centroid(x / 3.0, y / 3.0, z / 3.0);
+
+	double dMesh = raycast(centroid, down, fd, mesh);
+
+	double dFloor = distToFloor(centroid, floor);
+	
+	bool invalidFloor = dFloor < 0.0;
+	bool noMeshDist = dMesh == std::numeric_limits<double>::max();
+
+	if(invalidFloor && noMeshDist)
+	{
+		return 0.0;
+	}
+	else if(invalidFloor)
+	{
+		//std::cout << "Mesh closer " << std::sqrt(dMesh) << std::endl;
+		return std::sqrt(dMesh);
+	}
+	else if(noMeshDist)
+	{
+		//std::cout << "Floor closer " << dFloor << std::endl;
+		return dFloor;
+	}
+
+	double ddFloor = dFloor * dFloor;
+
+	if(ddFloor > dMesh)
+	{
+		//std::cout << "Mesh closer " << std::sqrt(dMesh) << std::endl;
+		return std::sqrt(dMesh);
+	}
+	else if(dMesh > ddFloor)
+	{
+		//std::cout << "Floor closer " << dFloor << std::endl;
+		return dFloor;
+	}
+	return dFloor;
+
+}
+
+double veryFastOverhangDistance(
+	const Mesh& mesh, 
+	const face_descriptor& fd, 
+	const K::Vector_3& floor)
+{
+	double distance = 0.0;
+	for(Mesh::Vertex_index vIndex: CGAL::vertices_around_face(
+		mesh.halfedge(fd), mesh))
+	{
+		double dFloor = distToFloor(mesh.point(vIndex), floor);
+		if(dFloor < 0)
+			continue;
+		distance += dFloor;
+	}
+
+	return distance / 3.0;
+}
+
+/*double averagedOverhangDistance(
+	const Mesh& mesh, 
+	const face_descriptor& fd, 
+	const K::Direction_3& down,
+	const K::Vector_3& floor)
+{
+	double distance = 0.0;
+	int numVertices = 0;
+
+	for(Mesh::Vertex_index vIndex: CGAL::vertices_around_face(
+		mesh.halfedge(fd), mesh))
+	{
+		const K::Point_3& vertex = mesh.point(vIndex);
+
+		double dMesh = raycast(vIndex, down, fd, mesh);
+
+		double dFloor = distToFloor(vertex, floor);
+		double ddFloor = dFloor * dFloor;
+		
+		bool invalidFloor = dFloor < 0.0;
+		bool noMeshDist = dMesh == std::numeric_limits<double>::max();
+
+		if(invalidFloor && noMeshDist)
+		{}
+		else if(invalidFloor)
+		{
+			//std::cout << "Mesh closer " << std::sqrt(dMesh) << std::endl;
+			distance += dMesh;
+		}
+		else if(noMeshDist)
+		{
+			//std::cout << "Floor closer " << dFloor << std::endl;
+			distance += ddFloor;
+		}
+		else 
+		{
+			if(ddFloor > dMesh)
+			{
+				//std::cout << "Mesh closer " << std::sqrt(dMesh) << std::endl;
+				distance += dMesh;
+			}
+			else if(dMesh > ddFloor)
+			{
+				//std::cout << "Floor closer " << dFloor << std::endl;
+				distance += ddFloor;			
+			}
+			else
+				distance += dMesh;
+		}
+		++numVertices;
+	}
+
+	return std::sqrt(distance / (double)numVertices);
+}*/
+
+double overhangVolume(
 	const Config& config, 
 	const Mesh& mesh, 
 	const MeshNormalsMap& fnormals,
 	const K::Vector_3& up,
 	const K::Vector_3& floor)
 {
-	// TODO: Optimisations can be done here! Everything's in degrees, and the 
-	// trig can be avoided!
 	const double maxOverhang = 90.0 + config.printer.overhangTolerance;
+	const double overhangThreshold = cos(maxOverhang / R);
 
-	double overhangSurfaceArea = 0.0;
+	double overhangVolume = 0.0;
+
+	const K::Direction_3 down(-up);
 
 	for(face_descriptor fd: faces(mesh))
 	{
 		auto n = fnormals[fd];
 		double dot = n * up;
-		double cos_a = acos(dot) * r;
 #ifdef XVERBOSE
-		std::cout << up << " | " << n << " = " << cos_a;
+		std::cout << up << " | " << n << " = " << dot << " (" << acos(dot) * R << ") ";
 #endif
-		if(cos_a >= maxOverhang)
+		if(dot < overhangThreshold)
 		{
 			if(isFloor(mesh, fd, floor)) {
 #ifdef XVERBOSE
@@ -112,12 +309,20 @@ double overhangArea(
 			}
 			else
 			{
-				// TODO: Scale by distance to floor
 				double farea = PMP::face_area(fd, mesh);
 				double projArea = farea * std::abs(dot);
-				overhangSurfaceArea += projArea;
+
+#if OVERHANG_LOGIC==OVERHANG_ALG_FAST
+				double ohDist = fastOverhangDistance(mesh, fd, down, floor);
+#elif OVERHANG_LOGIC==OVERHANG_ALG_VFAST
+				double ohDist = veryFastOverhangDistance(mesh, fd, floor);
+#endif
+
+				double volContrib = projArea * ohDist;
+				overhangVolume += volContrib;
 #ifdef XVERBOSE
 				std::cout << " [Overhang = " << farea << " | " << projArea << "]";
+				std::cout << " x " << ohDist << " => " << volContrib << std::endl;
 #endif
 			}
 		}
@@ -129,9 +334,8 @@ double overhangArea(
 		//std::cout << n << " (" << cos_a << ")" << std::endl;
 	}
 
-	return overhangSurfaceArea;
+	return overhangVolume;
 }
-
 
 void recenter(Mesh& mesh)
 {
@@ -178,7 +382,7 @@ void alignMeshSymmetryToGrid(Mesh& mesh)
 	K::Aff_transformation_3 matrix;
 	rotationAligning(planeNormal, originAxis, matrix);
 
-	CGAL::Polygon_mesh_processing::transform(matrix, mesh);
+	PMP::transform(matrix, mesh);
 }
 
 std::array<K::Point_3, 8> getOBBPointsFrom(Mesh& mesh)
@@ -186,11 +390,6 @@ std::array<K::Point_3, 8> getOBBPointsFrom(Mesh& mesh)
 	std::array<K::Point_3, 8> points;
 	CGAL::oriented_bounding_box(mesh, points);
 	return points;
-}
-
-K::Vector_3 normalize(const K::Vector_3& v)
-{
-	return v * (1.0 / CGAL::sqrt(v.squared_length()));
 }
 
 std::array<K::Vector_3, 6> 

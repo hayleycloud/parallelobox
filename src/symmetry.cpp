@@ -296,14 +296,10 @@ void symmetrySplit(
 	const Mesh& mesh, const K::Plane_3& plane, Mesh* outLeft, Mesh* outRight)
 {
 	*outLeft = Mesh(mesh);
-	CGAL::Polygon_mesh_processing::clip(
-		*outLeft, plane, 
-		CGAL::Polygon_mesh_processing::parameters::clip_volume(true));
+	PMP::clip(*outLeft, plane, PMP::parameters::clip_volume(true));
 
 	*outRight = Mesh(mesh);
-	CGAL::Polygon_mesh_processing::clip(
-		*outRight, plane.opposite(), 
-		CGAL::Polygon_mesh_processing::parameters::clip_volume(true));
+	PMP::clip(*outRight, plane.opposite(), PMP::parameters::clip_volume(true));
 }
 
 bool symmetrySplit(const Mesh& mesh, Mesh* outLeft, Mesh* outRight)

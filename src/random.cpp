@@ -1,14 +1,13 @@
 #include "random.h"
 
 std::random_device randDev;
-std::mt19937 randEng/*(randDev())*/;
+std::mt19937 randEng;
 
-void initRandom(std::optional<unsigned int> seed)
+Seed initRandom(std::optional<Seed> seed)
 {
-	if(seed)
-		randEng.seed(*seed);
-	else
-		randEng = std::mt19937(randDev());
+	Seed actualSeed = seed ? *seed : randDev();
+	randEng.seed(actualSeed);
+	return actualSeed;
 }
 
  
