@@ -18,7 +18,8 @@
 #include <filesystem>
 
 #define EXPORT_SEED_BLOCKS	true
-#define EXPORT_ALL_TRIES	true
+#define EXPORT_ALL_TRIES	false
+#define EXPORT_BEST_TRIES	false
 #define RESOLVE_EMPTIES		true
 
 namespace fs = std::filesystem;
@@ -140,7 +141,7 @@ GridCell* getNearestBoundaryTo(
 	if(targetCell.type == GridCell::ContentType::Boundary)
 		return std::addressof(targetCell);
 
-	constexpr int MAX_SEARCH_RADIUS = 2;
+	constexpr int MAX_SEARCH_RADIUS = 4;
 	for(int radius = 1; radius < MAX_SEARCH_RADIUS; ++radius)
 	{
 		int xStart = std::max(offsetX - radius, 0);
@@ -217,7 +218,7 @@ void assignMeshBoxesFrom(
 		for(GridCell* cell: sampledCells)
 		{
 			if(cell->parents.size() > 0)
-				std::cerr << "OOPSIE! Already parented!?" << std::endl;
+				std::cerr << "Already parented!?" << std::endl;
 			cell->parents.push_back(meshBox.get());
 		}
 
@@ -264,7 +265,15 @@ void saveMeshes(const std::string& directory, const std::vector<const MeshBox*>&
 	saveMeshes(directory, meshPtrs);
 }
 
-std::string getType(GridCell::ContentType type)
+void saveMeshes(const std::string& directory, const std::vector<std::unique_ptr<MeshBox>>& meshes)
+{
+	std::vector<const Mesh*> meshPtrs;
+	for(const auto& mesh: meshes)
+		meshPtrs.push_back(std::addressof(mesh->mesh));
+	saveMeshes(directory, meshPtrs);
+}
+
+std::string getTypeAsStr(GridCell::ContentType type)
 {
 	switch(type)
 	{
@@ -278,26 +287,14 @@ std::string getType(GridCell::ContentType type)
 	return "";
 }
 
-void refine(std::vector<const MeshBox*>& meshBoxes)
-{
-}
-
-
-bool processSubMesh(
+double processSubMesh(
 	const Config& config, 
-	int subIndex,
-	int numPrinters,
-	Mesh& mesh, 
-	std::vector<Mesh>& out)
+	const std::string& directory,
+	int subIndex, 
+	int numPrinters, 
+	Mesh& mesh)
 {
-	std::string parentDirectory = config.outputDir;
-
-	if(!config.symmetrySkip)
-	{
-		std::stringstream strstrm("");
-		strstrm << subIndex;
-		parentDirectory += "/" + strstrm.str();
-	}
+	std::string parentDirectory = directory;
 
 	recenter(mesh);
 
@@ -323,7 +320,7 @@ bool processSubMesh(
 		std::cout << "Too few printers available for mesh of this size!" << std::endl;
 		std::cout << "(" << minNumPrinters << " required, but only " 
 				  << numPrinters << " available)" << std::endl;
-		return false;
+		return -1.0;
 	}
 
 #if REPORT_STANDARD
@@ -402,66 +399,51 @@ bool processSubMesh(
 
 			regionGrowth(config, mesh, meshBoxes, grid, gridCells, printCostCache);
 
-			std::vector<const MeshBox*> mbPtrs;
-			for(auto& mb: meshBoxes)
-				mbPtrs.push_back(mb.get());
-
-			double parallelCost = parallelPrintingCost(config, grid, mbPtrs, printCostCache);
-			double firstCost = parallelCost;
+			double parallelCost = parallelPrintingCost(config, grid, meshBoxes, printCostCache);
 
 			//saveMeshes(dirName, mbPtrs);
 
 			//std::cout << "Blocks Grown." << std::endl;
 			int freePrinters = numPrinters - meshBoxes.size();
 
-			std::vector<std::unique_ptr<MeshBox>> newMeshBoxes;
-			fillEmptyBoundarySpaces(
-				config, mesh, newMeshBoxes, parallelCost, grid, gridCells, printCostCache);
-			/*std::vector<Cuboid> emptyRegions;
-			int numEmptyRegions = getDiscreteEmptyRegions(
-				config, grid, gridCells, emptyRegions);*/
-			parallelCost = parallelPrintingCost(config, grid, mbPtrs, printCostCache);
+			std::vector<std::unique_ptr<MeshBox>> fillerMeshBoxes;
+			bool modelCovered = fillEmptyBoundarySpaces(
+				config, mesh, fillerMeshBoxes, parallelCost, grid, gridCells, printCostCache);
 
-			int numEmptyRegions = newMeshBoxes.size();
-			bool modelCovered = true;
+			int numEmptyRegions = fillerMeshBoxes.size();
+
+
+			parallelCost = parallelPrintingCost(config, grid, meshBoxes, printCostCache);
+
 
 #if REPORT_STANDARD
 			std::cout << "After Block Growth Phase: " << std::endl;
-			std::cout << "\tParallel Printing Time = " << firstCost;
-			std::cout << " | " << parallelCost << std::endl;
+			std::cout << "\tParallel Printing Time = " << parallelCost << std::endl;
 			std::cout << "\t# meshes: " << meshBoxes.size();
-			std::cout << " | # empty regions: " << numEmptyRegions;
-			std::cout << " => # total: " << meshBoxes.size() + numEmptyRegions;
-			std::cout << std::endl;
-
-			if(!modelCovered)
-				std::cout << "ERR: Could not fill all empty regions!" << std::endl;
+			std::cout << " | # voids: " << fillerMeshBoxes.size() << std::endl;
 #endif
 
 			bool noExcessPrinters = true;
 #if RESOLVE_EMPTIES == true
-			for(auto& mb: newMeshBoxes)
-				mbPtrs.push_back(mb.get());
+			for(auto& mb: fillerMeshBoxes)
+				meshBoxes.push_back(std::move(mb));
 
-			noExcessPrinters = mergeEmptyRegions(
+			noExcessPrinters = resolveMeshExcess(
 				config, 
-				meshBoxes, newMeshBoxes, mbPtrs,
-				parallelCost, numPrinters, 
-				grid, gridCells,
-				printCostCache,
-				false);
-			
-			parallelCost = parallelPrintingCost(config, grid, mbPtrs, printCostCache);
+				meshBoxes, 
+				numPrinters, 
+				parallelCost, false,
+				grid, gridCells);
+
+			parallelCost = parallelPrintingCost(config, grid, meshBoxes, printCostCache);
 #if REPORT_STANDARD
 			std::cout << "After Empty Resolution Phase: " << std::endl;
 			std::cout << "\tParallel Printing Time = " << parallelCost << std::endl;
-			std::cout << "\t# meshes: " << meshBoxes.size();
-			std::cout << " | # empty regions: " << newMeshBoxes.size();
-			std::cout << " => # total: " << meshBoxes.size() + newMeshBoxes.size();
-			std::cout << std::endl;
+			std::cout << "\t# meshes: " << meshBoxes.size() << std::endl;
 #endif
 #endif
-			saveMeshes(dirName, mbPtrs);
+
+			saveMeshes(dirName, meshBoxes);
 
 			if(modelCovered && noExcessPrinters)
 			{
@@ -499,7 +481,8 @@ bool processSubMesh(
 			std::string targetDirName = parentDirectory + "/itr" + sis3.str();
 			fs::rename(srcDirName, targetDirName);
 #if REPORT_STANDARD
-			std::cout << "Selected attempt " << bestIndex+1 << " as best." << std::endl;
+			std::cout << "Selected attempt " << bestIndex+1 << " as best";
+			std::cout << " (time: " << score << ")." << std::endl;
 #endif
 		}
 #if REPORT_STANDARD	
@@ -563,7 +546,7 @@ bool processSubMesh(
 #if REPORT_BARE
 		std::cout << "No Valid Results Found!" << std::endl;
 #endif
-		return false;
+		return -1.0;
 	}
 
 #if REPORT_BARE
@@ -579,7 +562,16 @@ bool processSubMesh(
 
 	fs::rename(bestDir, parentDirectory + "/best");
 
-	return true;
+#if EXPORT_BEST_TRIES == false
+	for(int index = 0; index <= numPrinters; ++index)
+	{
+		std::stringstream ss("");
+		ss << index;
+		fs::remove_all(parentDirectory + "/itr" + ss.str());
+	}
+#endif
+
+	return bestScore;
 }
 
 int run(int argc, const char* argv[])
@@ -616,6 +608,7 @@ int run(int argc, const char* argv[])
 #endif
 
 	bool symmetrySucceeded = true;
+	std::array<int,2> numPrinters = { config.numPrinters, config.numPrinters };
 	std::vector<Mesh> subMeshes;
 	Mesh rightMesh, leftMesh;
 	if(!config.symmetrySkip &&
@@ -625,6 +618,15 @@ int run(int argc, const char* argv[])
 		validate(leftMesh, true);
 		subMeshes.push_back(rightMesh);
 		subMeshes.push_back(leftMesh);
+
+		int most = (int) std::ceil(config.numPrinters / 2.0);
+		int least = (int) std::floor(config.numPrinters / 2.0);
+		
+		if(PMP::volume(rightMesh) >= PMP::volume(leftMesh))
+			numPrinters = { most, least };
+		else
+			numPrinters = { least, most };
+
 #if REPORT_STANDARD
 		std::cout << "Applied preemptive optimization: symmetric partition." << std::endl;
 #endif
@@ -637,42 +639,79 @@ int run(int argc, const char* argv[])
 #endif
 	}
 	
-	std::vector<std::vector<Mesh>> subMeshSubDivs;
-	subMeshSubDivs.resize(subMeshes.size());
-
 	fs::remove_all(config.outputDir);
 	fs::create_directory(config.outputDir);
 
-	// TODO: Odd printers?
-	int numPrinters = config.numPrinters / subMeshSubDivs.size();
-
-	for(unsigned int index = 0; index < subMeshSubDivs.size(); ++index)
+	double bestScoreTotal = -1.0;
+	for(unsigned int index = 0; index < subMeshes.size(); ++index)
 	{
-		std::string dirName = config.outputDir;
+		std::string dirName = config.outputDir + "/tries";
+		fs::create_directory(dirName);
 
-		if(!config.symmetrySkip)
+		if(subMeshes.size() >= 2)
 		{
 			std::stringstream ss("");
 			ss << index;
 			dirName += "/" + ss.str();
+			fs::create_directory(dirName);
 		}
 
-		fs::create_directory(dirName);
+		std::cout << "Processing Mesh " << (index + 1) << "/" << subMeshes.size() << std::endl;
+		std::cout << "Number of printers provided " << numPrinters[index] << std::endl;
 
-		bool success = processSubMesh(
+		double bestScore = processSubMesh(
 			config, 
+			dirName,
 			index, 
-			numPrinters, 
-			subMeshes[index], 
-			subMeshSubDivs[index]);
-		if(!success)
+			numPrinters[index], 
+			subMeshes[index]);
+		if(bestScore <= 0.0)
 		{
+			bestScoreTotal = -1.0;
 #if REPORT_STANDARD
 			std::cout << "Sub-mesh pass failed! Dropping out." << std::endl;
 #endif
 			break;
 		}
+		
+		bestScoreTotal = bestScore > bestScoreTotal ? bestScore : bestScoreTotal;
 	}
+
+	std::cout << std::endl;
+	if(bestScoreTotal > 0.0)
+	{
+		std::cout << "Decomposed with parallel print time: " << bestScoreTotal << std::endl;
+
+		if(subMeshes.size() >= 2)
+		{
+			for(unsigned int index = 0; index < subMeshes.size(); ++index)
+			{
+				std::string dirName = config.outputDir + "/tries";
+
+				std::string indexDir = "/";
+				std::stringstream ss("");
+				ss << index;
+				indexDir += ss.str();
+
+				fs::rename(
+					dirName + indexDir + "/best", 
+					config.outputDir + indexDir);
+			}
+		}
+		else
+		{
+			fs::rename(
+				config.outputDir + "/tries/best", config.outputDir + "/best");
+		}
+
+		if(config.cleanupOutDirAfter)
+			fs::remove_all(config.outputDir + "/tries");
+	}
+	else
+	{
+		std::cout << "Failed to produce a valid decomposition." << std::endl;
+	}
+
 
 	std::chrono::time_point<std::chrono::steady_clock> endIval =
 		std::chrono::steady_clock::now();

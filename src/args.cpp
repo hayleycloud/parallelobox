@@ -57,6 +57,42 @@ std::optional<int> Arguments::getInt(std::string_view arg) const
 	}
 }
 
+std::optional<long> Arguments::getLong(std::string_view arg) const
+{
+	auto argIter = std::find(m_ArgSet.cbegin(), m_ArgSet.cend(), arg);
+	if(argIter == m_ArgSet.end())
+		return std::nullopt;
+	else
+	{
+		++argIter;
+		if(argIter == m_ArgSet.end())
+			return std::nullopt;
+
+		std::stringstream ss(*argIter);
+		long outInt;
+		ss >> outInt;
+		return outInt;
+	}
+}
+
+std::optional<long long> Arguments::getXLong(std::string_view arg) const
+{
+	auto argIter = std::find(m_ArgSet.cbegin(), m_ArgSet.cend(), arg);
+	if(argIter == m_ArgSet.end())
+		return std::nullopt;
+	else
+	{
+		++argIter;
+		if(argIter == m_ArgSet.end())
+			return std::nullopt;
+
+		std::stringstream ss(*argIter);
+		long long outInt;
+		ss >> outInt;
+		return outInt;
+	}
+}
+
 std::optional<float> Arguments::getFloat(std::string_view arg) const
 {
 	auto argIter = std::find(m_ArgSet.cbegin(), m_ArgSet.cend(), arg);

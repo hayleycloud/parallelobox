@@ -44,6 +44,25 @@ int calcMinNumPrinters(const Config& config, const Mesh& mesh)
 	return printersPerDim * printersPerDim * printersPerDim;*/
 }
 
+double rawPrintingCost(const Config& config, const Mesh& mesh)
+{
+	const double volume = PMP::volume(mesh);
+	const double area = PMP::area(mesh);
+
+	const double innerWallVol = area * config.printer.nozzleSize;
+	const double outerWallVol = 
+		area * (config.wallThickness - config.printer.nozzleSize);
+
+	const double infillVol = 
+		(volume - (config.wallThickness * area)) * config.infillDensity;
+
+	const double innerWallCost = innerWallVol / config.printer.speeds.innerWall;
+	const double outerWallCost = outerWallVol / config.printer.speeds.outerWall;
+	const double infillCost = infillVol / config.printer.speeds.infill; 
+
+	return innerWallCost + outerWallCost + infillCost;
+}
+
 double overhangCost(
 	const Config& config,
 	const Mesh& mesh,
@@ -52,17 +71,8 @@ double overhangCost(
 	const K::Vector_3& floor)
 {
 	double supportVolume = overhangVolume(config, mesh, fnormals, up, floor);
-	return (config.supportDensity * supportVolume) / config.printer.supportSpeed;
-}
-
-double printingCost(const Config& config, const Mesh& mesh)
-{
-	const double volume = PMP::volume(mesh) * config.infillDensity;
-	const double area = PMP::area(mesh);
-	const double volumeCost = volume / config.printer.infillSpeed; 
-	const double surfaceCost = area / config.printer.shellSpeed;
-	// TODO: squared_face_area for improved performance?
-	return volumeCost + surfaceCost;
+	return (config.supportDensity * supportVolume) 
+		/ config.printer.speeds.support;
 }
 
 bool fitsVolume(
@@ -192,23 +202,10 @@ double printingCost(
 	std::vector<Direction> allowedUpDirs = 
 		calcOrientationsThatFit(config, meshBox.mesh);
 
-	double simplePrintingCost = printingCost(config, meshBox.mesh);
+	double simplePrintingCost = rawPrintingCost(config, meshBox.mesh);
 
 	double overhangCost = computeBestOverhangCost(
 		config, grid, allowedUpDirs, meshBox);
-
-	/*int x;
-	if(rand() % 100 == 0)
-	{
-		K::Point_3 min, max;
-		bounds(meshBox.mesh, min, max);
-		std::cout << "Min: " << min << ", Max: " << max << " = " << max - min << std::endl;
-	const double volumeCost = PMP::volume(meshBox.mesh) / config.printer.infillSpeed; 
-	const double surfaceCost = PMP::area(meshBox.mesh) / config.printer.shellSpeed;
-		std::cout << "V: " << volumeCost << ", SA: " << surfaceCost << " = " << volumeCost + surfaceCost << std::endl;
-		CGAL::IO::write_STL("dfgh.stl", meshBox.mesh);
-		std::cin >> x;
-	}*/
 
 	return std::abs(simplePrintingCost + overhangCost);
 }
@@ -287,3 +284,21 @@ double parallelPrintingCost(
 	return highestCost;
 }
  
+double parallelPrintingCost(
+	const Config& config, 
+	const Grid& grid, 
+	const std::vector<std::unique_ptr<MeshBox>>& printers,
+	PrintingCostCache& cache)
+{
+	double highestCost = std::numeric_limits<double>::lowest();
+
+	for(const auto& mesh: printers)
+	{
+		double printCost = printingCost(config, grid, *mesh, cache);
+		if(printCost > highestCost)
+			highestCost = printCost;
+	}
+
+	return highestCost;
+}
+

@@ -18,6 +18,10 @@ public:
 
 	[[nodiscard]] std::optional<int> getInt(std::string_view arg) const;
 
+	[[nodiscard]] std::optional<long> getLong(std::string_view arg) const;
+
+	[[nodiscard]] std::optional<long long> getXLong(std::string_view arg) const;
+
 	[[nodiscard]] std::optional<float> getFloat(std::string_view arg) const;
 
 private:

@@ -8,14 +8,14 @@
 
 int calcMinNumPrinters(const Config& config, const Mesh& mesh);
 
+double rawPrintingCost(const Config& config, const Mesh& mesh);
+
 double overhangCost(
 	const Config& config, 
 	const Mesh& mesh, 
 	const MeshNormalsMap& fnormals,
 	const K::Vector_3& up,
 	const K::Vector_3& floor);
-
-double printingCost(const Config& config, const Mesh& mesh);
 
 bool fitsVolume(const Config& config, const Mesh& mesh);
 
@@ -59,6 +59,12 @@ double parallelPrintingCost(
 	const Config& config, 
 	const Grid& grid, 
 	const std::vector<const MeshBox*>& printers,
+	PrintingCostCache& cache);
+
+double parallelPrintingCost(
+	const Config& config, 
+	const Grid& grid, 
+	const std::vector<std::unique_ptr<MeshBox>>& printers,
 	PrintingCostCache& cache);
 
  

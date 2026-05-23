@@ -391,6 +391,7 @@ std::optional<Cuboid> safeExpand(
 	return d.x + d.y + d.z;
 }
 
+// 1.0 is ahead, 0.0 is off to the side (perpendicular)
 [[nodiscard]] double directionalFactor(
 	Direction direction,
 	const MeshBox& source, const MeshBox& other)
@@ -547,6 +548,8 @@ std::optional<Cuboid> safeExpand(
 		//std::cout << toText(direction) << " " << directionalFactor(direction, source, *other) << " " << source.dims.centroid() << " " << other->dims.centroid() << " " << 
 			//other->dims.centroid() - source.dims.centroid() << std::endl;
 
+		// TODO: Does this need negating? df() says 1.0 if ahead yes?
+		// Larger scores for aheadness
 		double dirFactor = (1.0 - directionalFactor(direction, source, *other));
 		double distCost = dirFactor / (1.0 / (dist + EPSILON));
 		double distCost2 = distCost * distCost;
@@ -609,7 +612,7 @@ std::optional<Cuboid> safeExpand(
 	// Standard Objective
 	///////////////////////////////////////////////////////////////////////////
 	// This accounts for core printing cost + minimal support structure print costs
-	double printCost = printingCost(config, grid, newMeshBox, printCostCache);
+	double printCost = printingCost(config, grid, newMeshBox);
 	double dPrintCost = printCost - currentPrintCost;
 
 	// Penalisation of Proximity
@@ -808,7 +811,7 @@ bool continueRegionGrowth(
 	return remainingCells > 0;
 }
 
-void saveMeshes(
+/*void saveMeshes(
 	const std::string& directory,
 	const std::vector<std::unique_ptr<MeshBox>>& meshes)
 {
@@ -825,7 +828,7 @@ void saveMeshes(
 
 		++meshIndex;
 	}
-}
+}*/
 
 void regionGrowth(
 	const Config& config,
