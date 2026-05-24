@@ -16,7 +16,8 @@ std::optional<Cuboid> safeExpand(
 	Direction direction,
 	const Cuboid& region,
 	const Grid& grid,
-	mv::vector3<GridCell>& gridCells);
+	mv::vector3<GridCell>& gridCells,
+	std::vector<GridCell*>& newCells);
 
 void grow(
 	Direction direction, 

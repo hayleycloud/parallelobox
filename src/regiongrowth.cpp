@@ -10,6 +10,8 @@ namespace fs = std::filesystem;
 
 #define EXPORT_INTERMEDIATES	false
 #define USE_CLUSTERS    		false
+#define PARALLELIZE_SEARCH		true
+//#define VERBOSE
 
 void printMeshBoxes(const std::vector<std::unique_ptr<MeshBox>>& meshboxes)
 {
@@ -119,6 +121,65 @@ void addCellsToMeshBox(MeshBox& box, std::vector<GridCell*>& cells)
 	}
 
 	return {};
+}
+
+void growSafe(
+	Direction direction, 
+	const Mesh& parent,
+	const Grid& grid,
+	mv::vector3<GridCell>& gridCells, 
+	MeshBox& box,
+	std::vector<GridCell*>& newCells)
+{
+	// Direction indicates the side being grown!
+	switch(direction)
+	{
+		case Direction::Left:
+		{
+			newCells = sampleExpand(Direction::Left, gridCells, box);
+
+			--box.dims.origin.x;
+			++box.dims.size.x;
+		}
+		break;                                                      
+		case Direction::Right:                                          
+		{
+			newCells = sampleExpand(Direction::Right, gridCells, box);
+
+			++box.dims.size.x;
+		}
+		break;
+		case Direction::Down:
+		{
+			newCells = sampleExpand(Direction::Down, gridCells, box);
+
+			--box.dims.origin.y;
+			++box.dims.size.y;
+		}
+		break;
+		case Direction::Up:
+		{
+			newCells = sampleExpand(Direction::Up, gridCells, box);
+
+			++box.dims.size.y;
+		}
+		break;
+		case Direction::Out:
+		{
+			newCells = sampleExpand(Direction::Out, gridCells, box);
+
+			--box.dims.origin.z;
+			++box.dims.size.z;
+		}
+		break;
+		case Direction::In:
+		{
+			newCells = sampleExpand(Direction::In, gridCells, box);
+
+			++box.dims.size.z;
+		}
+		break;                                                      
+	}
 }
 
 void grow(
@@ -296,7 +357,8 @@ std::optional<Cuboid> safeExpand(
 	Direction direction,
 	const Cuboid& region,
 	const Grid& grid,
-	mv::vector3<GridCell>& gridCells)
+	mv::vector3<GridCell>& gridCells,
+	std::vector<GridCell*>& newCells)
 {
 	std::optional<Cuboid> newRegion = extendRegionIn(direction, region, grid);
 	if(!newRegion)
@@ -307,7 +369,7 @@ std::optional<Cuboid> safeExpand(
 		return std::nullopt;
 	}
 
-	std::vector<GridCell*> newCells = sampleExpand(direction, gridCells, region);
+	newCells = sampleExpand(direction, gridCells, region);
 	if(newCells.empty())
 	{
 #ifdef VERBOSE
@@ -368,12 +430,22 @@ std::optional<Cuboid> safeExpand(
 	return count;
 }
 
-[[nodiscard]] size_t l1n(const Vector3D& a, const Vector3D& b)
+[[nodiscard]] int l1(const Vector3D& v)
+{
+	return std::abs(v.x) + std::abs(v.y) + std::abs(v.z);
+}
+
+[[nodiscard]] int l1Fast(const Vector3D& v)
+{
+	return v.x + v.y + v.z;
+}
+
+[[nodiscard]] int l1n(const Vector3D& a, const Vector3D& b)
 {
 	return std::abs(b.x - a.x) + std::abs(b.y - a.y) + std::abs(b.z - a.z);
 }
 
-[[nodiscard]] size_t l1nProximity(
+[[nodiscard]] int l1nProximity(
 	const Vector3D& centroid1, const Vector3D& size1,
 	const Vector3D& centroid2, const Vector3D& size2)
 {
@@ -404,23 +476,119 @@ std::optional<Cuboid> safeExpand(
 	return std::max(0.0, dirVec * dc2);
 }
 
-[[nodiscard]] int diffBetween(int minA, int maxA, int minB, int maxB)
+[[nodiscard]] int displacementBetween(int minA, int maxA, int minB, int maxB)
 {
-	if(maxA < minB)
+	if(maxA < minB)				// A < B, no overlap (+)
 		return minB - maxA;
-	else if(maxB < minA)
-		return minA - maxB;
-	return 0;
+	else if(maxB < minA)		// B < A, no overlap (-)
+		return maxB - minA;
+	return 0;					// 0 if overlap
 }
 
-[[nodiscard]] Vector3D diffBetween(const Cuboid& a, const Cuboid& b)
+[[nodiscard]] int distanceBetween(int minA, int maxA, int minB, int maxB)
+{
+	if(maxA < minB)	
+		return minB - maxA;
+	else if(maxB < minA)		
+		return maxA - maxB;
+	return 0;					// 0 if overlap
+}
+
+[[nodiscard]] Vector3D displacementsBetween(const Cuboid& a, const Cuboid& b)
 {
 	const Vector3D maxA = a.end(), maxB = b.end();
 	return {
-		diffBetween(a.origin.x, maxA.x, b.origin.x, maxB.x),
-		diffBetween(a.origin.y, maxA.y, b.origin.y, maxB.y),
-		diffBetween(a.origin.z, maxA.z, b.origin.z, maxB.z)
+		displacementBetween(a.origin.x, maxA.x, b.origin.x, maxB.x),
+		displacementBetween(a.origin.y, maxA.y, b.origin.y, maxB.y),
+		displacementBetween(a.origin.z, maxA.z, b.origin.z, maxB.z)
 	};
+}
+
+[[nodiscard]] Vector3D spaceBetween(const Cuboid& a, const Cuboid& b)
+{
+	const Vector3D maxA = a.end(), maxB = b.end();
+	return {
+		distanceBetween(a.origin.x, maxA.x, b.origin.x, maxB.x),
+		distanceBetween(a.origin.y, maxA.y, b.origin.y, maxB.y),
+		distanceBetween(a.origin.z, maxA.z, b.origin.z, maxB.z)
+	};
+}
+
+[[nodiscard]] Vector3D spaceFromDisplacements(const Vector3D& displacements)
+{
+	return {
+		std::abs(displacements.x),
+		std::abs(displacements.y),
+		std::abs(displacements.z)
+	};
+}
+
+[[nodiscard]] int getComponent(Direction direction, const Vector3D& vec)
+{
+	switch(direction)
+	{
+		case Direction::Right:
+		case Direction::Left:
+			return vec.x;
+		case Direction::Up:
+		case Direction::Down:
+			return vec.y;
+		case Direction::In:
+		case Direction::Out:
+			return vec.z;
+	}
+
+	return std::numeric_limits<int>::max();
+}
+
+[[nodiscard]] std::pair<int,int> getOrthoComponents(
+	Direction direction, const Vector3D& vec)
+{
+	switch(direction)
+	{
+		case Direction::Right:
+		case Direction::Left:
+			return { vec.y, vec.z };
+		case Direction::Up:
+		case Direction::Down:
+			return { vec.x, vec.z };
+		case Direction::In:
+		case Direction::Out:
+			return { vec.x, vec.y };
+	}
+
+	return {
+		std::numeric_limits<int>::max(), std::numeric_limits<int>::max()
+	};
+}
+
+[[nodiscard]] int displacementIn(Direction direction, const Vector3D& vec)
+{
+	switch(direction)
+	{
+		case Direction::Right:
+			return vec.x;
+		case Direction::Left:
+			return -vec.x;
+		case Direction::Up:
+			return vec.y;
+		case Direction::Down:
+			return -vec.y;
+		case Direction::In:
+			return vec.z;
+		case Direction::Out:
+			return -vec.z;
+	}
+
+	return std::numeric_limits<int>::max();
+}
+
+[[nodiscard]] double directionalFactor(Direction direction, const Vector3D& space)
+{
+	//int dirDist = getComponent(direction, space);
+	std::pair<int,int> orthoDists = getOrthoComponents(direction, space);
+
+	return (double) (orthoDists.first + orthoDists.second) / 2.0;
 }
 
 [[nodiscard]] int lInf(const Vector3D& d)
@@ -430,7 +598,7 @@ std::optional<Cuboid> safeExpand(
 
 [[nodiscard]] double lInfProximity(const Cuboid& a, const Cuboid& b)
 {
-	return lInf(diffBetween(a, b));
+	return lInf(displacementsBetween(a, b));
 }
 
 [[nodiscard]] double l2nSq(const Vector3D& a, const Vector3D& b)
@@ -445,15 +613,15 @@ std::optional<Cuboid> safeExpand(
 }
 
 [[nodiscard]] bool isGrowthAway(
-	Direction direction, const MeshBox& region1, const MeshBox& region2)
+	Direction direction, const MeshBox& source, const MeshBox& other)
 {
-	const Vector3D delta = region2.dims.centroid() - region1.dims.centroid();
+	const Vector3D delta = other.dims.centroid() - source.dims.centroid();
 	switch(direction)
 	{
-		case Direction::Left:
-			return delta.x >= 0;
 		case Direction::Right:
 			return delta.x <= 0;
+		case Direction::Left:
+			return delta.x >= 0;
 		case Direction::Up:
 			return delta.y <= 0;
 		case Direction::Down:
@@ -467,12 +635,12 @@ std::optional<Cuboid> safeExpand(
 }
 
 [[nodiscard]] double proximitylInf(
-	Direction direction, const MeshBox& region1, const MeshBox& region2)
+	Direction direction, const MeshBox& source, const MeshBox& other)
 {
-	if(isGrowthAway(direction, region1, region2))
+	if(isGrowthAway(direction, source, other))
 		return -1.0;
 
-	return lInfProximity(region1.dims, region2.dims);
+	return lInfProximity(source.dims, other.dims);
 }
 
 [[nodiscard]] std::optional<double> proximityl1n(
@@ -516,7 +684,7 @@ std::optional<Cuboid> safeExpand(
 	return distance;
 }
 
-[[nodiscard]] double proximityCost(
+[[nodiscard]] double proximityCostDeprecated(
 	Direction direction, 
 	const MeshBox& region1, const MeshBox& region2,
 	size_t modelLength)
@@ -533,7 +701,54 @@ std::optional<Cuboid> safeExpand(
 
 [[nodiscard]] double proximityCost(
 	Direction direction,
-	const MeshBox& source,
+	const MeshBox& target,
+	const MeshBox& newRegion,
+	const std::vector<const MeshBox*>& regions)
+{
+	constexpr double EPSILON = 0.1;
+
+	double totalCost = 0.0;
+	double unitWeight = 1.0 / static_cast<double>(regions.size());
+	for(const MeshBox* other: regions)
+	{
+		Vector3D dR = displacementsBetween(newRegion.dims, other->dims);
+		int localDisplacement = displacementIn(direction, dR);
+		if(localDisplacement < 0)	// Is behind direction?
+			continue;				// Irrelevant to growth
+
+		Vector3D dS = spaceFromDisplacements(dR);
+
+		int prevDisplacement = displacementIn(
+				direction, displacementsBetween(target.dims, other->dims));
+
+#ifdef VERBOSE
+		std::cout << "\t\t\tdR: " << dR << " | d: " << localDisplacement << std::endl;
+#endif
+
+		if(prevDisplacement == 0)	// Was displacement already overlapping?
+			continue;				// Irrelevant to growth
+
+		//double dirFactor = (double) localDisplacement / (double) l1(dC);
+
+		double dirDist = localDisplacement + directionalFactor(direction, dS);
+
+		double distCost = (1.0 / (dirDist + EPSILON));
+		distCost = distCost * distCost;
+
+#ifdef VERBOSE
+		std::cout << "\t\t\tdirDist: " << dirDist << " | dC: " << distCost << std::endl;
+#endif
+		//std::cout << toText(direction) << " " << dist << " " << directionalDistCost << std::endl;
+		totalCost += distCost;
+	}
+
+	return totalCost;
+}
+
+[[nodiscard]] double proximityCostOld(
+	Direction direction,
+	const MeshBox& target,
+	const MeshBox& newRegion,
 	const std::vector<const MeshBox*>& regions)
 {
 	constexpr double EPSILON = 0.5;
@@ -541,16 +756,11 @@ std::optional<Cuboid> safeExpand(
 	double totalCost = 0.0;
 	for(const MeshBox* other: regions)
 	{
-		//double dist = lInfProximity(source.dims, other->dims);
-		double dist = proximitylInf(direction, source, *other);
+		double dist = proximitylInf(direction, newRegion, *other);
 		if(dist < 0.0)
 			continue;
-		//std::cout << toText(direction) << " " << directionalFactor(direction, source, *other) << " " << source.dims.centroid() << " " << other->dims.centroid() << " " << 
-			//other->dims.centroid() - source.dims.centroid() << std::endl;
 
-		// TODO: Does this need negating? df() says 1.0 if ahead yes?
-		// Larger scores for aheadness
-		double dirFactor = (1.0 - directionalFactor(direction, source, *other));
+		double dirFactor = directionalFactor(direction, newRegion, *other);
 		double distCost = dirFactor / (1.0 / (dist + EPSILON));
 		double distCost2 = distCost * distCost;
 		//std::cout << dist << " => " << distCost2 << std::endl;;
@@ -559,83 +769,126 @@ std::optional<Cuboid> safeExpand(
 	}
 
 	return totalCost;
-}	
+}
 
-[[nodiscard]] double computeCost(
+[[nodiscard]] double proximityCostVOld(
+	Direction direction,
+	const MeshBox& target,
+	const MeshBox& newRegion,
+	const std::vector<const MeshBox*>& regions)
+{
+	constexpr double EPSILON = 0.5;
+
+	double totalCost = 0.0;
+	for(const MeshBox* other: regions)
+	{
+		double dist = proximitylInf(direction, newRegion, *other);
+		if(dist < 0.0)
+			continue;
+
+		double dirFactor = (1.0 - directionalFactor(direction, newRegion, *other));
+		double distCost = dirFactor / (1.0 / (dist + EPSILON));
+		double distCost2 = distCost * distCost;
+		//std::cout << dist << " => " << distCost2 << std::endl;;
+		//std::cout << toText(direction) << " " << dist << " " << directionalDistCost << std::endl;
+		totalCost += distCost2;
+	}
+
+	return totalCost;
+}
+
+struct PartialCostReturn
+{
+	std::unique_ptr<MeshBox> newRegion;
+	double printingCost;
+	std::vector<GridCell*> newCells;
+};
+
+bool computePartialCost(
 	const Config& config,
 	const Mesh& parent,
-	double currentPrintCost,
 	Direction direction, 
 	const MeshBox& region,
 	const std::vector<std::unique_ptr<MeshBox>>& regions, 
 	const Grid& grid,
 	mv::vector3<GridCell>& gridCells,
-	PrintingCostCache& printCostCache)
+	PartialCostReturn& returnData)
 {
 	// REMEMBER: Lower is better, negative not allowed
-	
-	// Exclude target from comparison set
-	std::vector<const MeshBox*> others;
-	for(const auto& other: regions)
-	{
-		if(std::addressof(region) != other.get())
-			others.push_back(other.get());
-	}
 	
 	// Grow and Test for Constraint Violations
 	///////////////////////////////////////////////////////////////////////////
 	
 	std::optional<Cuboid> newRegion = 
-		safeExpand(direction, region.dims, grid, gridCells);
+		safeExpand(direction, region.dims, grid, gridCells, returnData.newCells);
 	if(!newRegion)
-		return -1.0;
+		return false;
 
 	// Compute new MeshBox
 	///////////////////////////////////////////////////////////////////////////
 	
-	MeshBox newMeshBox(*newRegion);
+	std::unique_ptr<MeshBox> newMeshBox = std::make_unique<MeshBox>(*newRegion);
 
-	if(INVALID(clipFromMesh(grid, parent, newMeshBox)))
-		return -1.0;
+	if(INVALID(clipFromMesh(grid, parent, *newMeshBox)))
+		return false;
 	
 	// Printability Constraint
 	///////////////////////////////////////////////////////////////////////////
 	
-	if(!fitsVolume(config, newMeshBox.mesh))
+	if(!fitsVolume(config, newMeshBox->mesh))
 	{
 #ifdef VERBOSE
 		std::cout << "\tGrowth " << toText(direction) << " does not fit volume" << std::endl;
 #endif
-		return -1.0;
+		return false;
 	}
+
+	//growSafe(direction, parent, grid, gridCells, region, returnData.newCells);
 
 	// Standard Objective
 	///////////////////////////////////////////////////////////////////////////
 	// This accounts for core printing cost + minimal support structure print costs
-	double printCost = printingCost(config, grid, newMeshBox);
-	double dPrintCost = printCost - currentPrintCost;
+	double printCost = printingCost(config, grid, *newMeshBox);
+
+	returnData.newRegion = std::move(newMeshBox);
+	returnData.printingCost = printCost;
+	return true;
+}
+
+[[nodiscard]] double completeComputeCost(
+	const Config& config,
+	Direction direction, 
+	double medianDeltaPrintCost,
+	double partialPrintCost,
+	const MeshBox& newRegion,
+	const MeshBox& target,
+	const std::vector<std::unique_ptr<MeshBox>>& meshBoxes, 
+	const Grid& grid)
+{
+	// Exclude target from comparison set
+	std::vector<const MeshBox*> others;
+	for(const auto& other: meshBoxes)
+	{
+		if(std::addressof(target) != other.get())
+			others.push_back(other.get());
+	}
 
 	// Penalisation of Proximity
 	///////////////////////////////////////////////////////////////////////////
 	
-	const size_t modelLength = l1n(
-		Vector3D(0, 0, 0), Vector3D(
-			grid.getNumBoxesX(), grid.getNumBoxesY(), grid.getNumBoxesZ()));
-	double beta = 0.5;
-	double lambda = currentPrintCost * beta;
-	double freeProxCost = proximityCost(direction, newMeshBox, others);
-	double proxCost = lambda * freeProxCost;
+	double proxPenalty = proximityCost(direction, target, newRegion, others);
+	double proxCost = (medianDeltaPrintCost * 0.5) * proxPenalty;
 
-	//std::cout << "\t\t" << proxCost << " (" << freeProxCost << ")" << std::endl;
 
 	// Application of standard objective
 	///////////////////////////////////////////////////////////////////////////
 
-	double score = dPrintCost + proxCost;
+	double score = partialPrintCost + proxCost;
 #ifdef VERBOSE
 	std::cout << "\t\tScore for " << toText(direction)
-			  << ":   \t" << score << " [Proximity: " << proxCost
-			  << ", +Printing: " << dPrintCost 
+			  << ":   \t" << score << " [Proximity: " << proxPenalty
+			  << " => " << proxCost
+			  << ", +Printing: " << partialPrintCost
 			  << "]" << std::endl;
 #endif
 
@@ -655,8 +908,6 @@ std::optional<Direction> getBestDirection(
 			bestCost = it.second;
 		}
 	}
-
-	//std::cout << toText(*bestDir) << ": " << bestScore << std::endl;
 
 	return best;
 }
@@ -735,6 +986,28 @@ void fastAssign(
 	recomputeAABBs(sourceBoxes);
 }
 
+double medianOf(const std::vector<double>& values)
+{
+	int numValues = values.size();
+	if(numValues > 0)
+	{
+		div_t result = std::div(numValues, 2);
+		if(result.rem == 0)		// is even
+			return values[result.quot];
+		else					// is odd
+		{
+			return (values[result.quot] + values[result.quot + 1]) / 2.0;
+		}
+	}
+	return 0.0;
+}
+
+double medianOf(std::vector<double>& values)
+{
+	std::sort(values.begin(), values.end(), std::less<double>());
+	return medianOf(static_cast<const std::vector<double>&>(values));
+}
+
 bool growBoxIfPossible(
 	const Config& config,
 	const Mesh& parent,
@@ -756,20 +1029,57 @@ bool growBoxIfPossible(
 		Direction::Up, Direction::Down,
 		Direction::In, Direction::Out
 	};
+	std::unordered_map<Direction,PartialCostReturn> partialCosts;
+	for(Direction direction: directions)
+		partialCosts[direction] = (PartialCostReturn) { nullptr, -1.0, {} };
+
+#if PARALLELIZE_SEARCH == true
+	#pragma omp parallel for default(none) shared(directions, partialCosts, currentPrintCost, config, parent, targetBox, sourceBoxes, grid, gridCells)
+#endif
+	for(Direction direction: directions)
+	{
+		computePartialCost(
+			config, parent,
+			direction,
+			targetBox, sourceBoxes,
+			grid, gridCells,
+			partialCosts[direction]);
+		partialCosts[direction].printingCost -= currentPrintCost;
+	}
+
+	std::vector<double> orderedPartialScores;
+	orderedPartialScores.reserve(directions.size());
+
+	for(Direction direction: directions)
+	{
+		auto& cost = partialCosts[direction];
+		if(cost.newRegion && cost.printingCost >= 0.0)
+			orderedPartialScores.push_back(cost.printingCost);
+	}
+
+	double medianDeltaPrintCost = medianOf(orderedPartialScores);
+
 	std::unordered_map<Direction,double> costs;
 	for(Direction direction: directions)
 		costs[direction] = -1.0;
 
-	#pragma omp parallel for default(none) shared(directions, costs, config, parent, currentPrintCost, targetBox, sourceBoxes, grid, gridCells, printCostCache)
+#if PARALLELIZE_SEARCH == true
+	#pragma omp parallel for default(none) shared(directions, currentPrintCost, partialCosts, config, costs, medianDeltaPrintCost, targetBox, sourceBoxes, grid, gridCells)
+#endif
 	for(Direction direction: directions)
 	{
-		costs[direction] = computeCost(
-			config, parent,
-			currentPrintCost,
-			direction,
-			targetBox, sourceBoxes,
-			grid, gridCells,
-			printCostCache);
+		auto& partialCost = partialCosts[direction];
+		if(partialCost.newRegion)
+		{
+			costs[direction] = completeComputeCost(
+				config,
+				direction,
+				currentPrintCost,
+				partialCost.printingCost,
+				*partialCost.newRegion,
+				targetBox, sourceBoxes,
+				grid);
+		}
 	}
 
 	std::optional<Direction> bestDirection = getBestDirection(costs);
@@ -785,7 +1095,12 @@ bool growBoxIfPossible(
 	std::cout << "\tBest Cost: " << toText(*bestDirection)
 			  << " = " << costs[*bestDirection] << std::endl;
 #endif
-	grow(*bestDirection, parent, grid, gridCells, targetBox);
+
+	PartialCostReturn& partialData = partialCosts[*bestDirection];
+	targetBox.mesh = partialData.newRegion->mesh;
+	targetBox.dims = partialData.newRegion->dims;
+	addCellsToMeshBox(targetBox, partialData.newCells);
+	//grow(*bestDirection, parent, grid, gridCells, targetBox);
 
 	return true;
 }
@@ -850,8 +1165,12 @@ void regionGrowth(
 #else
 	typedef std::pair<MeshBox*,double> BoxScore;
 
+	std::vector<const MeshBox*> lockedBoxes;
+	lockedBoxes.reserve(sourceBoxes.size());
+
 	unsigned int iterNum = 1;
-	while(continueRegionGrowth(sourceBoxes, gridCells))
+	bool stagnated = false;
+	while(!stagnated && continueRegionGrowth(sourceBoxes, gridCells))
 	{
 #ifdef VERBOSE
 		std::cout << "Region Growth Iteration " << iterNum << std::endl;
@@ -859,27 +1178,35 @@ void regionGrowth(
 
 		std::list<BoxScore> rankedBoxes;
 		for(auto& sourceBox: sourceBoxes)
-			rankedBoxes.emplace_back(
-				sourceBox.get(), 
-				printingCost(config, grid, *sourceBox, printCostCache));
+		{
+			if(std::find(lockedBoxes.cbegin(), lockedBoxes.cend(), sourceBox.get())
+				== lockedBoxes.cend())
+			{
+				rankedBoxes.emplace_back(
+					sourceBox.get(), 
+					printingCost(config, grid, *sourceBox, printCostCache));
+			}
+		}
 
 		// Fastest part so far gets priority
 		rankedBoxes.sort([](const BoxScore& a, const BoxScore& b) {
 			return a.second < b.second;
 		});
 
-		bool onePassed = false;
+		stagnated = true;
 		for(auto& box: rankedBoxes)
 		{
-			if(growBoxIfPossible(
+			if(!growBoxIfPossible(
 				config, parent, 
 				*box.first, box.second, 
-				sourceBoxes, gridCells, grid,
+				sourceBoxes, 
+				gridCells, grid,
 				printCostCache))
 			{
-				onePassed = true;
-				break;
+				lockedBoxes.push_back(box.first);
 			}
+			else
+				stagnated = false;
 		}
 
 		// Recompute meshes
@@ -888,7 +1215,7 @@ void regionGrowth(
 		//for(auto& sourceBox: sourceBoxes)
 		//	clipFromMesh(grid, parent, *sourceBox);
 
-		if(!onePassed)
+		if(stagnated)
 		{
 #ifdef VERBOSE
 			std::cout << "Algorithm has locked." << std::endl;
@@ -897,13 +1224,6 @@ void regionGrowth(
 		}
 
 		pruneCache(sourceBoxes, printCostCache);
-
-		//if(!enumerateConflicts(sourceBoxes, gridCells))
-		//{
-		//	std::cout << std::endl << std::endl << std::endl << std::endl;
-		//	std::cout << "ERROR: SHOULD NOT OVERLAP!!!!" << std::endl;
-		//	return;
-		//}
 
 		++iterNum;
 	}

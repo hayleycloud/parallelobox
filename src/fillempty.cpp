@@ -418,8 +418,9 @@ int getDiscreteEmptyRegions(
 	// Grow and Test for Constraint Violations
 	///////////////////////////////////////////////////////////////////////////
 	
+	std::vector<GridCell*> tempVec;
 	std::optional<Cuboid> newRegion = 
-		safeExpand(direction, region.dims, grid, gridCells);
+		safeExpand(direction, region.dims, grid, gridCells, tempVec);
 	if(!newRegion)
 		return -1.0;
 

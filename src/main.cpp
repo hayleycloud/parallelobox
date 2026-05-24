@@ -410,8 +410,7 @@ double processSubMesh(
 			bool modelCovered = fillEmptyBoundarySpaces(
 				config, mesh, fillerMeshBoxes, parallelCost, grid, gridCells, printCostCache);
 
-			int numEmptyRegions = fillerMeshBoxes.size();
-
+			bool noExcessPrinters = !fillerMeshBoxes.empty();
 
 			parallelCost = parallelPrintingCost(config, grid, meshBoxes, printCostCache);
 
@@ -423,7 +422,6 @@ double processSubMesh(
 			std::cout << " | # voids: " << fillerMeshBoxes.size() << std::endl;
 #endif
 
-			bool noExcessPrinters = true;
 #if RESOLVE_EMPTIES == true
 			for(auto& mb: fillerMeshBoxes)
 				meshBoxes.push_back(std::move(mb));

@@ -21,25 +21,25 @@ set(REPORTING
 	"Set output reporting level (none, bare, standard, extra, verbose, all)")
 
 if(REPORTING STREQUAL "none")
-	message("Suppressing output reporting.")
+	message(STATUS "Suppressing output reporting.")
 	add_compile_definitions(VERBOSITY=0)
 elseif(REPORTING STREQUAL "bare")
-	message("Reporting only essential outputs.")
+	message(STATUS "Reporting only essential outputs.")
 	add_compile_definitions(VERBOSITY=1)
 elseif(REPORTING STREQUAL "standard")
-	message("Reporting normal outputs.")
+	message(STATUS "Reporting normal outputs.")
 	add_compile_definitions(VERBOSITY=2)
 elseif(REPORTING STREQUAL "extra")
-	message("Reporting normal outputs and extra information.")
+	message(STATUS "Reporting normal outputs and extra information.")
 	add_compile_definitions(VERBOSITY=3)
 elseif(REPORTING STREQUAL "verbose")
-	message("Reporting with extensive detail.")
+	message(STATUS "Reporting with extensive detail.")
 	add_compile_definitions(VERBOSITY=4)
 elseif(REPORTING STREQUAL "all")
-	message("Reporting absolutely everything.")
+	message(STATUS "Reporting absolutely everything.")
 	add_compile_definitions(VERBOSITY=5)
 else()
-	message("Reporting normal outputs.")
+	message(STATUS "Reporting normal outputs.")
 	add_compile_definitions(VERBOSITY=2)
 endif()
 
@@ -52,20 +52,48 @@ endif()
 
 set(OVERHANG_LOGIC 
 	"balance" CACHE STRING 
-	"Specify accuracy of overhang determination logic (accurate, balance, fast)")
+	"Specify accuracy of overhang determination logic \
+	(accurate, balance [default], fast)")
 
 if(OVERHANG_LOGIC STREQUAL "accurate")
-	message("Using slow, high accuracy overhang determination logic.")
+	message(STATUS "Using slow, high accuracy overhang determination logic.")
 	add_compile_definitions(OVERHANG_LOGIC=1)
 elseif(OVERHANG_LOGIC STREQUAL "balance")
-	message("Using reasonably accurate overhang determination logic.")
+	message(STATUS "Using reasonably accurate overhang determination logic.")
 	add_compile_definitions(OVERHANG_LOGIC=2)
 elseif(OVERHANG_LOGIC STREQUAL "fast")
-	message("Using fast, low accuracy accurate overhang determination logic.")
+	message(STATUS "Using fast, low accuracy overhang determination logic.")
 	add_compile_definitions(OVERHANG_LOGIC=3)
 else()
-	message("Using reasonably accurate overhang determination logic.")
+	message(WARNING "Unknown overhang determination logic specified!")
+	message(STATUS "Using default reasonably accurate overhang determination logic.")
 	add_compile_definitions(OVERHANG_LOGIC=2)
+endif()
+
+set(RESOLVE_PARALLELIZE
+	"narrow" CACHE STRING 
+	"Computational parallelization of the conflict resolution algorithm \
+	(broad, narrow [default], off)")
+
+if(RESOLVE_PARALLELIZE STREQUAL "off")
+	message(STATUS "Conflict resolution algorithm will run in serial.")
+	add_compile_definitions(PARALLEL_RESOLVE=0)
+elseif(RESOLVE_PARALLELIZE STREQUAL "narrow")
+	message(STATUS "Conflict resolution algorithm will parallelize local search.")
+	add_compile_definitions(PARALLEL_RESOLVE=1)
+elseif(RESOLVE_PARALLELIZE STREQUAL "broad")
+	message(STATUS "Conflict resolution algorithm will parallelize broad search.")
+	message(WARNING 
+"CGAL methods that are supposed to be thread-safe but are not may result in \
+race conditions and indeterminate behavior when using broad parallelization \
+of the conflict resolution algorithm.\
+\
+Narrow parallelization is less fast but guarantees stability and determinacy.")
+	add_compile_definitions(PARALLEL_RESOLVE=2)
+else()
+	message(WARNING "Unknown conflict resolution parallelization specified!")
+	message(STATUS "Conflict resolution algorithm will parallelize narrow search.")
+	add_compile_definitions(PARALLEL_RESOLVE=1)
 endif()
 
 add_executable(parallelobox 

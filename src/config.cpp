@@ -359,6 +359,19 @@ void printUsage() {
 	return config;
 }
 
+void printSentence(const std::vector<std::string>& words)
+{
+	auto itr = words.cbegin(); 
+	while(itr != words.cend())
+	{
+		std::cout << *itr;
+		++itr;
+		if(itr != words.cend())
+			std::cout << ", ";
+	}
+	std::cout << "." << std::endl;
+}
+
 void printConfig(const Config& config)
 {
 	std::cout << "Config" << std::endl;
@@ -408,13 +421,17 @@ void printConfig(const Config& config)
 	if(config.seed)
 		std::cout << "Custom seed: " << *config.seed << std::endl;
 
-	std::cout << "Flags:" << std::endl;
+	std::vector<std::string> flags;
 	if(config.symmetrySkip)
-		std::cout << "Symmetry Skipping, ";
+		flags.push_back("[Symmetry Skipping]");
 	if(config.relaxSafeties)
-		std::cout << "Relaxed Mesh Safeties, ";
+		flags.push_back("[Relaxed Mesh Safeties]");
 	if(config.cleanupOutDirAfter)
-		std::cout << "Cleaning Output After.";
+		flags.push_back("[Cleaning Output After]");
+
+	std::cout << "Flags: ";
+	printSentence(flags);
+	std::cout << std::endl;
 
 	std::cout << "Output directory: " << config.outputDir << std::endl;
 

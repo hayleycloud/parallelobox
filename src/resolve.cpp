@@ -2,6 +2,9 @@
 #include "resolve.h"
 #include "objective.h"
 
+#define PARALLEL_RESOLVE_OFF	0
+#define PARALLEL_RESOLVE_NARROW	1
+#define PARALLEL_RESOLVE_BROAD	2
 
 void updateStorage(
 	std::vector<std::unique_ptr<MeshBox>>& meshBoxes,
@@ -234,21 +237,12 @@ std::unique_ptr<MergeOption> getMergeOption(
 			std::unique_ptr<MeshBox> neighborCopy = 
 				std::make_unique<MeshBox>(bestNeighbor->mesh, bestNeighbor->dims);
 
-			double newScore;
 			bool succeeded = false;
 			if(mergeSoft(*newMesh, *neighborCopy))
 			{
 				if(fitsVolume(config, newMesh->mesh))
 				{
-					newScore = printingCost(config, grid, *newMesh);
-					if(enforceParallelScore && newScore > currentParallelScore)
-					{
-						std::cout << ":(" << std::endl;
-					}
-					else
-					{
-						succeeded = true;
-					}
+					succeeded = true;
 				}
 			}
 
@@ -257,7 +251,7 @@ std::unique_ptr<MergeOption> getMergeOption(
 					std::move(newMesh),
 					std::addressof(target),
 					bestNeighbor,
-					newScore
+					bestScore
 				);
 		}
 	}
@@ -368,20 +362,16 @@ std::unique_ptr<MergeOption> getMergeOptionMP(
 			std::unique_ptr<MeshBox> newMesh =
 				std::make_unique<MeshBox>(target.mesh, target.dims); 
 
-			bool succeeded = false;
 			if(mergeSoft(*newMesh, *neighborSrc[bestIndex]))
 			{
-				if(fitsVolume(config, newMesh->mesh))
-					succeeded = true;
-			}
-
-			if(succeeded)
 				return std::make_unique<MergeOption>(
 					std::move(newMesh),
 					std::addressof(target),
 					neighborSrc[bestIndex],
 					bestScore
 				);
+			}
+
 		}
 	}
 
@@ -399,12 +389,27 @@ std::unique_ptr<MergeOption> findBestMergeOption(
 	std::unique_ptr<MergeOption> bestOption = nullptr;
 	for(auto& target: meshBoxes)
 	{
+#if PARALLEL_RESOLVE == PARALLEL_RESOLVE_NARROW
 		std::unique_ptr<MergeOption> mergeOpt = getMergeOptionMP(
 			config, 
 			*target, 
 			currentParallelScore,
 			grid, gridCells,
 			cache);
+#else
+		PreparedMergeCacheOps cacheOps;
+
+		std::unique_ptr<MergeOption> mergeOpt = getMergeOption(
+			config, 
+			*target, 
+			currentParallelScore,
+			grid, gridCells,
+			cache,
+			cacheOps);
+
+		commitToCache(cacheOps, cache);
+#endif
+
 
 		if(mergeOpt)
 		{
@@ -475,31 +480,23 @@ int mergeRegions(
 	bool optionFound = true;
 	while(optionFound && meshBoxes.size() > numAvailablePrinters)
 	{
-		std::unique_ptr<MergeOption> mergeOpt = findBestMergeOption(
-			config,
-			meshBoxes,
-			currentParallelScore,
-			grid, gridCells,
-			cache);
+		std::unique_ptr<MergeOption> mergeOpt = 
+#if PARALLEL_RESOLVE == PARALLEL_RESOLVE_BROAD
+			findBestMergeOptionMP(
+#else
+			findBestMergeOption(
+#endif
+				config,
+				meshBoxes,
+				currentParallelScore,
+				grid, gridCells,
+				cache);
 
 		if(mergeOpt)
 		{
-			//const Mesh* aPtr = std::addressof(mergeOpt->to->mesh);
-			//const Mesh* bPtr = std::addressof(mergeOpt->from->mesh);
-
-			//std::cout << "Score: " << mergeOpt->printingCost << std::endl;
-			//std::cout << "Reality: " << printingCost(config, grid, *mergeOpt->newMeshBox) << std::endl;
-
 			invalidate(*mergeOpt, cache);
 			commitRelaxedMerge(*mergeOpt);
 			updateStorage(meshBoxes, {mergeOpt->from});
-
-			//std::vector<const MeshBox*> mbPtrs;
-			//for(auto& mb: meshBoxes)
-			//	mbPtrs.push_back(mb.get());
-
-			//PrintingCostCache pcache;
-			//std::cout << "Now: " << parallelPrintingCost(config, grid, mbPtrs, pcache) << std::endl;
 			++numMerged;
 		}
 		else
