@@ -30,7 +30,7 @@ void getSurfaceBoxes(
 
 	gridCells.resize(grid.getNumBoxesZ());
 	
-	#pragma omp parallel for default(none) shared(gridCells, grid, inside) firstprivate(mesh)
+	#pragma omp parallel for default(none) shared(mesh, gridCells, grid, inside)// firstprivate(mesh)
 	for(int z = 0; z < grid.getNumBoxesZ(); ++z)
 	{
 		gridCells[z].resize(grid.getNumBoxesY());
@@ -44,7 +44,11 @@ void getSurfaceBoxes(
 				Mesh surfMesh(mesh);
 				grid.clipSurface(surfMesh, x, y, z);
 
-				if(surfMesh.number_of_vertices() > 0)
+				bool hasValidSurface = surfMesh.number_of_vertices() > 0;
+				surfMesh.clear();
+				surfMesh.collect_garbage();
+
+				if(hasValidSurface)
 				{
 					Mesh volMesh(mesh);
 					grid.clipVolume(volMesh, x, y, z);
