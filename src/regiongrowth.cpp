@@ -797,32 +797,40 @@ std::optional<Cuboid> safeExpand(
 	return totalCost;
 }
 
-struct PartialCostReturn
+struct ExpandCostData
 {
 	std::unique_ptr<MeshBox> newRegion;
-	double printingCost;
 	std::vector<GridCell*> newCells;
 };
 
-bool computePartialCost(
+double computeExpandCost(
 	const Config& config,
 	const Mesh& parent,
 	Direction direction, 
-	const MeshBox& region,
-	const std::vector<std::unique_ptr<MeshBox>>& regions, 
+	double currentPrintCost,
+	const MeshBox& target,
+	const std::vector<std::unique_ptr<MeshBox>>& meshBoxes, 
 	const Grid& grid,
 	mv::vector3<GridCell>& gridCells,
-	PartialCostReturn& returnData)
+	ExpandCostData& returnData)
 {
-	// REMEMBER: Lower is better, negative not allowed
+	//REMEMBER: Lower is better, negative not allowed
+	
+	// Exclude target from comparison set
+	std::vector<const MeshBox*> others;
+	for(const auto& other: meshBoxes)
+	{
+		if(std::addressof(target) != other.get())
+			others.push_back(other.get());
+	}
 	
 	// Grow and Test for Constraint Violations
 	///////////////////////////////////////////////////////////////////////////
 	
 	std::optional<Cuboid> newRegion = 
-		safeExpand(direction, region.dims, grid, gridCells, returnData.newCells);
+		safeExpand(direction, target.dims, grid, gridCells, returnData.newCells);
 	if(!newRegion)
-		return false;
+		return -1.0;
 
 	// Compute new MeshBox
 	///////////////////////////////////////////////////////////////////////////
@@ -830,7 +838,7 @@ bool computePartialCost(
 	std::unique_ptr<MeshBox> newMeshBox = std::make_unique<MeshBox>(*newRegion);
 
 	if(INVALID(clipFromMesh(grid, parent, *newMeshBox)))
-		return false;
+		return -1.0;
 	
 	// Printability Constraint
 	///////////////////////////////////////////////////////////////////////////
@@ -840,25 +848,29 @@ bool computePartialCost(
 #ifdef VERBOSE
 		std::cout << "\tGrowth " << toText(direction) << " does not fit volume" << std::endl;
 #endif
-		return false;
+		return -1.0;
 	}
-
-	//growSafe(direction, parent, grid, gridCells, region, returnData.newCells);
 
 	// Standard Objective
 	///////////////////////////////////////////////////////////////////////////
 	// This accounts for core printing cost + minimal support structure print costs
 	double printCost = printingCost(config, grid, *newMeshBox);
 
+	// Proximity Penalty
+	///////////////////////////////////////////////////////////////////////////
+	
+	double proxPenalty = proximityCost(direction, target, *newMeshBox, others);
+	double proxCost = (currentPrintCost * 0.5) * proxPenalty;
+
 	returnData.newRegion = std::move(newMeshBox);
-	returnData.printingCost = printCost;
-	return true;
+	return printCost + proxCost;
 }
 
 [[nodiscard]] double completeComputeCost(
 	const Config& config,
 	Direction direction, 
-	double medianDeltaPrintCost,
+	//double medianDeltaPrintCost,
+	double currentPrintCost,
 	double partialPrintCost,
 	const MeshBox& newRegion,
 	const MeshBox& target,
@@ -877,7 +889,7 @@ bool computePartialCost(
 	///////////////////////////////////////////////////////////////////////////
 	
 	double proxPenalty = proximityCost(direction, target, newRegion, others);
-	double proxCost = (medianDeltaPrintCost * 0.5) * proxPenalty;
+	double proxCost = (currentPrintCost * 0.5) * proxPenalty;
 
 
 	// Application of standard objective
@@ -986,28 +998,6 @@ void fastAssign(
 	recomputeAABBs(sourceBoxes);
 }
 
-double medianOf(const std::vector<double>& values)
-{
-	int numValues = values.size();
-	if(numValues > 0)
-	{
-		div_t result = std::div(numValues, 2);
-		if(result.rem == 0)		// is even
-			return values[result.quot];
-		else					// is odd
-		{
-			return (values[result.quot] + values[result.quot + 1]) / 2.0;
-		}
-	}
-	return 0.0;
-}
-
-double medianOf(std::vector<double>& values)
-{
-	std::sort(values.begin(), values.end(), std::less<double>());
-	return medianOf(static_cast<const std::vector<double>&>(values));
-}
-
 bool growBoxIfPossible(
 	const Config& config,
 	const Mesh& parent,
@@ -1029,58 +1019,28 @@ bool growBoxIfPossible(
 		Direction::Up, Direction::Down,
 		Direction::In, Direction::Out
 	};
-	std::unordered_map<Direction,PartialCostReturn> partialCosts;
+	std::unordered_map<Direction,double> costs;
+	std::unordered_map<Direction,ExpandCostData> expandData;
 	for(Direction direction: directions)
-		partialCosts[direction] = (PartialCostReturn) { nullptr, -1.0, {} };
+	{
+		costs[direction] = -1.0;
+		expandData[direction] = (ExpandCostData) { nullptr, {} };
+	}
 
 #if PARALLELIZE_SEARCH == true
-	#pragma omp parallel for default(none) shared(directions, partialCosts, currentPrintCost, config, parent, targetBox, sourceBoxes, grid, gridCells)
+	#pragma omp parallel for default(none) shared(directions, costs, expandData, currentPrintCost, config, parent, targetBox, sourceBoxes, grid, gridCells)
 #endif
 	for(Direction direction: directions)
 	{
-		computePartialCost(
+		costs[direction] = computeExpandCost(
 			config, parent,
 			direction,
+			currentPrintCost,
 			targetBox, sourceBoxes,
 			grid, gridCells,
-			partialCosts[direction]);
-		partialCosts[direction].printingCost -= currentPrintCost;
+			expandData[direction]);
 	}
 
-	std::vector<double> orderedPartialScores;
-	orderedPartialScores.reserve(directions.size());
-
-	for(Direction direction: directions)
-	{
-		auto& cost = partialCosts[direction];
-		if(cost.newRegion && cost.printingCost >= 0.0)
-			orderedPartialScores.push_back(cost.printingCost);
-	}
-
-	double medianDeltaPrintCost = medianOf(orderedPartialScores);
-
-	std::unordered_map<Direction,double> costs;
-	for(Direction direction: directions)
-		costs[direction] = -1.0;
-
-#if PARALLELIZE_SEARCH == true
-	#pragma omp parallel for default(none) shared(directions, currentPrintCost, partialCosts, config, costs, medianDeltaPrintCost, targetBox, sourceBoxes, grid, gridCells)
-#endif
-	for(Direction direction: directions)
-	{
-		auto& partialCost = partialCosts[direction];
-		if(partialCost.newRegion)
-		{
-			costs[direction] = completeComputeCost(
-				config,
-				direction,
-				currentPrintCost,
-				partialCost.printingCost,
-				*partialCost.newRegion,
-				targetBox, sourceBoxes,
-				grid);
-		}
-	}
 
 	std::optional<Direction> bestDirection = getBestDirection(costs);
 	if(!bestDirection)
@@ -1096,10 +1056,10 @@ bool growBoxIfPossible(
 			  << " = " << costs[*bestDirection] << std::endl;
 #endif
 
-	PartialCostReturn& partialData = partialCosts[*bestDirection];
-	targetBox.mesh = partialData.newRegion->mesh;
-	targetBox.dims = partialData.newRegion->dims;
-	addCellsToMeshBox(targetBox, partialData.newCells);
+	ExpandCostData& bestData = expandData[*bestDirection];
+	targetBox.mesh = bestData.newRegion->mesh;
+	targetBox.dims = bestData.newRegion->dims;
+	addCellsToMeshBox(targetBox, bestData.newCells);
 	//grow(*bestDirection, parent, grid, gridCells, targetBox);
 
 	return true;
