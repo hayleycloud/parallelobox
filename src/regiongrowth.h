@@ -12,6 +12,8 @@
 std::optional<Cuboid> extendRegionIn(
 	Direction direction, Cuboid cuboid, const Grid& grid);
 
+void addCellsToMeshBox(MeshBox& box, std::vector<GridCell*>& cells);
+
 std::optional<Cuboid> safeExpand(
 	Direction direction,
 	const Cuboid& region,

@@ -17,7 +17,7 @@
 #include <fstream>
 #include <filesystem>
 
-#define EXPORT_SEED_BLOCKS	true
+#define EXPORT_SEED_BLOCKS	false
 #define EXPORT_ALL_TRIES	false
 #define EXPORT_BEST_TRIES	false
 #define RESOLVE_EMPTIES		true
@@ -273,6 +273,56 @@ void saveMeshes(const std::string& directory, const std::vector<std::unique_ptr<
 	saveMeshes(directory, meshPtrs);
 }
 
+void saveIterationScores(
+	const Config& config,
+	const std::vector<std::vector<double>>& iterationScores,
+	const std::vector<std::vector<std::vector<double>>>& subitrScores)
+{
+	std::ofstream outFile(config.outputDir + "/iteration_scores.csv");
+
+	outFile << "Iterations:\r\n";
+
+	int submesh = 1;
+	for(const auto& iterations: iterationScores)
+	{
+		outFile << "\r\nSub-Mesh: " << submesh << "\r\n";
+
+		int iteration = 1;
+		for(double iterationScore: iterations)
+		{
+			outFile << iteration << "," << iterationScore << "\r\n";
+			++iteration;
+		}
+
+		++submesh;
+	}
+
+	outFile << "\r\nSub-Iterations:\r\n";
+
+	submesh = 1;
+	for(const auto& smSubitrScores: subitrScores)
+	{
+		outFile << "Sub-Mesh: " << submesh << "\r\n";
+
+		int iteration = 1;
+		for(const auto& iterationScores: smSubitrScores)
+		{
+			outFile << "Iteration: " << iteration << "\r\n";
+			int subiteration = 1;
+			for(double subitrScore: iterationScores)
+			{
+				outFile << " ," << subitrScore << "\r\n";
+				++subiteration;
+			}
+			++iteration;
+		}
+
+		++submesh;
+	}
+	
+	outFile.close();
+}
+
 std::string getTypeAsStr(GridCell::ContentType type)
 {
 	switch(type)
@@ -292,7 +342,9 @@ double processSubMesh(
 	const std::string& directory,
 	int subIndex, 
 	int numPrinters, 
-	Mesh& mesh)
+	Mesh& mesh,
+	std::vector<double>& itrScores,
+	std::vector<std::vector<double>>& outSubitrScores)
 {
 	std::string parentDirectory = directory;
 
@@ -340,12 +392,13 @@ double processSubMesh(
 	mv::vector3<GridCell> gridCells;
     getSurfaceBoxes(mesh, grid, gridCells, numPrinters);
 
-	std::vector<double> itrScores;
-	itrScores.reserve(numPrinters - minNumPrinters);
+	unsigned int numIterations = (numPrinters - minNumPrinters) + 1;
+	itrScores.reserve(numIterations);
+	outSubitrScores.reserve(numIterations);
 
 	unsigned int skipTo = 0;
 
-	for(unsigned int i = numPrinters; i > minNumPrinters; --i)
+	for(unsigned int i = numPrinters; i >= minNumPrinters; --i)
 	{
 		double score = 0.0;
 		std::vector<double> subitrScores;
@@ -372,7 +425,7 @@ double processSubMesh(
 				subitrScores.push_back(-1.0);
 #if REPORT_EXTRA
 				std::cout << "Skipping." << std::endl;
-				std::cout << subitrScores.size() << std::endl;
+				std::cout << subitrScores[i].size() << std::endl;
 #endif
 				continue;
 			}
@@ -385,7 +438,7 @@ double processSubMesh(
 			std::string dirName = parentDirectory + "/itr" + sis.str();
 			fs::create_directory(dirName);
 
-#ifdef EXPORT_SEED_BLOCKS
+#if EXPORT_SEED_BLOCKS
 			std::vector<Mesh> clusterMeshes;
 			for(auto& mb: meshBoxes)
 				clusterMeshes.emplace_back(mb->mesh);
@@ -448,19 +501,26 @@ double processSubMesh(
 				subitrScores.push_back(parallelCost);
 			}
 			else {
-				subitrScores.push_back(-1.0);
+				subitrScores.push_back(-parallelCost);
 #if REPORT_STANDARD
 				std::cout << "Attempt failed." << std::endl;
 #endif
 			}
 		}
 
+		outSubitrScores.push_back(subitrScores);
+
 		int bestIndex = -1;
+		double bestFailScore = std::numeric_limits<double>::lowest();
 		score = std::numeric_limits<double>::max();
 		for(int index = 0; index < config.sampleTries; ++index) 
 		{
 			if(subitrScores[index] <= 0.0)
+			{
+				if(subitrScores[index] > bestFailScore)
+					bestFailScore = subitrScores[index];
 				continue;
+			}
 
 			if(subitrScores[index] < score)
 			{
@@ -498,7 +558,7 @@ double processSubMesh(
 		}
 #endif
 
-		itrScores.push_back(bestIndex >= 0 ? score : -1.0);
+		itrScores.push_back(bestIndex >= 0 ? score : bestFailScore);
 	}
 
 #if REPORT_STANDARD
@@ -640,6 +700,10 @@ int run(int argc, const char* argv[])
 	fs::remove_all(config.outputDir);
 	fs::create_directory(config.outputDir);
 
+
+	std::vector<std::vector<double>> itrScores(subMeshes.size());
+	std::vector<std::vector<std::vector<double>>> subitrScores(subMeshes.size());
+
 	double bestScoreTotal = -1.0;
 	for(unsigned int index = 0; index < subMeshes.size(); ++index)
 	{
@@ -662,7 +726,9 @@ int run(int argc, const char* argv[])
 			dirName,
 			index, 
 			numPrinters[index], 
-			subMeshes[index]);
+			subMeshes[index],
+			itrScores[index],
+			subitrScores[index]);
 		if(bestScore <= 0.0)
 		{
 			bestScoreTotal = -1.0;
@@ -695,21 +761,36 @@ int run(int argc, const char* argv[])
 					dirName + indexDir + "/best", 
 					config.outputDir + indexDir);
 			}
+
+			if(config.cleanupOutDirAfter)
+			{
+				fs::remove_all(config.outputDir + "/tries");
+			}
 		}
 		else
 		{
 			fs::rename(
 				config.outputDir + "/tries/best", config.outputDir + "/best");
+
+			if(config.cleanupOutDirAfter)
+			{
+				//fs::remove_all(config.outputDir + "/tries");
+
+				std::string tmpDir = config.outputDir + "_tmp";
+				fs::rename(config.outputDir, tmpDir);
+				fs::rename(tmpDir + "/best", config.outputDir);
+
+				fs::remove_all(tmpDir);
+			}
 		}
 
-		if(config.cleanupOutDirAfter)
-			fs::remove_all(config.outputDir + "/tries");
 	}
 	else
 	{
 		std::cout << "Failed to produce a valid decomposition." << std::endl;
 	}
 
+	saveIterationScores(config, itrScores, subitrScores);
 
 	std::chrono::time_point<std::chrono::steady_clock> endIval =
 		std::chrono::steady_clock::now();

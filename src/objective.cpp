@@ -31,7 +31,7 @@ int calcMinNumPrinters(const Config& config, const Mesh& mesh)
 		++meshDimItr;
 		++printDimItr;
 	}
-	return numPrinters;
+	return numPrinters >= 2 ? numPrinters : 2;
 
 	/*double smallestPrinterDim = std::min(
 		config.printer.volume.width, std::min(

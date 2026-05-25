@@ -276,6 +276,7 @@ void printUsage() {
 		config.outputDir = *outputDir;
 	else
 		config.outputDir = extractModelName(config.inputFile);
+	config.outputDir.erase(config.outputDir.find_last_not_of("\\/")+1);
 
 	int numPrinters = -1;	// Require this from the user
 	auto numPrintersArg = args.getInt("--num");
