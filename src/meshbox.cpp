@@ -52,12 +52,13 @@ void getSurfaceBoxes(
 				{
 					Mesh volMesh(mesh);
 					grid.clipVolume(volMesh, x, y, z);
-					validate(volMesh, false);
 
 					gridCells[z][y][x] = (GridCell) { 
 						Vector3D(x, y, z), volMesh, {}, 
 						GridCell::ContentType::Boundary
 					};
+					
+					//validate(gridCells[z][y][z].mesh, false);
 				}
 				else
 				{

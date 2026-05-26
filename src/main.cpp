@@ -182,12 +182,17 @@ std::vector<std::unique_ptr<MeshBox>> getSourceMeshBoxesFrom(
 		GridCell *result = getNearestBoundaryTo(grid, gridCells, cluster);
 		if(result)
 		{
-			sourceMeshBoxes.emplace_back(std::make_unique<MeshBox>((MeshBox) {
+			std::unique_ptr<MeshBox> meshBox = std::make_unique<MeshBox>(
+				(MeshBox) {
 				result->mesh,
 				Cuboid(result->position, Vector3D(1, 1, 1)),
 				{result}
-			}));
-			result->parents.push_back(sourceMeshBoxes.back().get());
+			});
+			//validate(meshBox->mesh, false);
+			assignNormals(*meshBox);
+			result->parents.push_back(meshBox.get());
+			sourceMeshBoxes.push_back(std::move(meshBox));
+			
 		}
 	}
 

@@ -408,7 +408,7 @@ void printConfig(const Config& config)
 		      << printer.speeds.support << " mm/s" << std::endl;
 
 	std::cout << "    Nozzle size: " 
-		      << printer.nozzleSize << "°" << std::endl;
+		      << printer.nozzleSize << " mm" << std::endl;
 	std::cout << "    Overhang tolerance: " 
 		      << printer.overhangTolerance << "°" << std::endl;
 

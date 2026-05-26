@@ -4,7 +4,6 @@
 
 int calcMinNumPrinters(const Config& config, const Mesh& mesh)
 {
-	// TODO: Descending dimensional comparison
 	K::Point_3 min, max;
 	bounds(mesh, min, max);
 
@@ -32,16 +31,11 @@ int calcMinNumPrinters(const Config& config, const Mesh& mesh)
 		++printDimItr;
 	}
 	return numPrinters >= 2 ? numPrinters : 2;
+}
 
-	/*double smallestPrinterDim = std::min(
-		config.printer.volume.width, std::min(
-			config.printer.volume.height, 
-			config.printer.volume.depth));
-	double largestMeshDim = std::max(dims.x(), std::max(dims.y(), dims.z()));
-
-	int printersPerDim = std::ceil(largestMeshDim / smallestPrinterDim);
-
-	return printersPerDim * printersPerDim * printersPerDim;*/
+double featureSpeed(const Config& config, double speed)
+{
+	return config.printer.nozzleSize * config.layerHeight * speed;
 }
 
 double rawPrintingCost(const Config& config, const Mesh& mesh)
@@ -56,9 +50,12 @@ double rawPrintingCost(const Config& config, const Mesh& mesh)
 	const double infillVol = 
 		(volume - (config.wallThickness * area)) * config.infillDensity;
 
-	const double innerWallCost = innerWallVol / config.printer.speeds.innerWall;
-	const double outerWallCost = outerWallVol / config.printer.speeds.outerWall;
-	const double infillCost = infillVol / config.printer.speeds.infill; 
+	const double innerWallCost = innerWallVol / 
+		featureSpeed(config, config.printer.speeds.innerWall);
+	const double outerWallCost = outerWallVol / 
+		featureSpeed(config, config.printer.speeds.outerWall);
+	const double infillCost = infillVol / 
+		featureSpeed(config, config.printer.speeds.infill); 
 
 	return innerWallCost + outerWallCost + infillCost;
 }
@@ -72,7 +69,7 @@ double overhangCost(
 {
 	double supportVolume = overhangVolume(config, mesh, fnormals, up, floor);
 	return (config.supportDensity * supportVolume) 
-		/ config.printer.speeds.support;
+		/ featureSpeed(config, config.printer.speeds.support);
 }
 
 bool fitsVolume(
