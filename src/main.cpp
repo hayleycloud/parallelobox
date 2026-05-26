@@ -369,10 +369,19 @@ double processSubMesh(
 	int minNumPrinters = calcMinNumPrinters(config, mesh);
 	if(minNumPrinters > numPrinters)
 	{
+		if(!config.failOnInsufficientPrinters)
+			std::cout << "WARNING: ";
+
 		std::cout << "Too few printers available for mesh of this size!" << std::endl;
 		std::cout << "(" << minNumPrinters << " required, but only " 
 				  << numPrinters << " available)" << std::endl;
-		return -1.0;
+		if(config.failOnInsufficientPrinters)
+			return -1.0;
+		else
+		{
+			std::cout << "Continuing anyway." << std::endl;
+			minNumPrinters = 2;
+		}
 	}
 
 #if REPORT_STANDARD

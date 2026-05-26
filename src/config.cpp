@@ -177,6 +177,7 @@ void printUsage() {
 	std::cout << "" << std::endl;
 	std::cout << "  --clean-out             Remove intermediates from output dir." << std::endl;
 	std::cout << "  --relax-safeties        Skip the more aggressive mesh validation checks." << std::endl;
+	std::cout << "  --no-min-printers       Continue even if there are probably not enough printers available." << std::endl;
 	std::cout << "  --skip-symmetry         Skip the initial symmetry partition." << std::endl;
 	std::cout << "  --help                  Print this usage documentation." << std::endl;
 	std::cout << std::endl;
@@ -350,6 +351,12 @@ void printUsage() {
 	else
 		config.relaxSafeties = false;
 
+	auto noMinPrinters = args.getFlag("--no-min-printers");
+	if(noMinPrinters)
+		config.failOnInsufficientPrinters = false;
+	else
+		config.failOnInsufficientPrinters = true;
+
 	auto symmetrySkipArg = args.getFlag("--skip-symmetry");
 	if(symmetrySkipArg)
 		config.symmetrySkip = true;
@@ -427,8 +434,9 @@ void printConfig(const Config& config)
 		flags.push_back("[Symmetry Skipping]");
 	if(config.relaxSafeties)
 		flags.push_back("[Relaxed Mesh Safeties]");
-	if(config.cleanupOutDirAfter)
-		flags.push_back("[Cleaning Output After]");
+	if(!config.failOnInsufficientPrinters)
+		flags.push_back("[Proceed With Insufficient Printers]");
+	if(config.cleanupOutDirAfter) flags.push_back("[Cleaning Output After]");
 
 	std::cout << "Flags: ";
 	printSentence(flags);

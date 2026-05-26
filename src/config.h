@@ -48,6 +48,7 @@ struct Config
 
 	bool symmetrySkip;
 	bool relaxSafeties;
+	bool failOnInsufficientPrinters;
 	bool cleanupOutDirAfter;
 };
 
