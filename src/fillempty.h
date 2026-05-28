@@ -25,6 +25,7 @@ bool fillEmptyBoundarySpaces(
 	const Mesh& mesh,
 	std::vector<std::unique_ptr<MeshBox>>& outMeshBoxes,
 	double currentParallelCost,
+	int printerLimit,
 	const Grid& grid, 
 	mv::vector3<GridCell>& gridCells,
 	PrintingCostCache& printCostCache);

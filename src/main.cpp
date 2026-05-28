@@ -20,6 +20,7 @@
 #define EXPORT_SEED_BLOCKS	false
 #define EXPORT_ALL_TRIES	false
 #define EXPORT_BEST_TRIES	false
+#define NO_EMPTY_FILL		false
 #define RESOLVE_EMPTIES		true
 
 namespace fs = std::filesystem;
@@ -92,34 +93,43 @@ K::Vector_3 normalize(const K::Vector_3& v)
 	return v * (1.0 / CGAL::sqrt(v.squared_length()));
 }
 
-MeshErrorSet validate(Mesh& mesh, bool throwOnFail)
+MeshErrorSet validate(Mesh& mesh, bool throwOnFail, MeshErrorSet filter)
 {
 	MeshErrorSet errors = NO_MESH_ERRORS;
 
-	auto fparts = mesh.add_property_map<face_descriptor, std::size_t>("f:part").first;
-	int numSeparatedRegions = PMP::connected_components(mesh, fparts);
-	mesh.remove_property_map(fparts);
-	if(numSeparatedRegions > 1)
+	if(HAS_ERROR(MeshErrors::Discontinuous, filter))
 	{
-		if(throwOnFail)
-			throw std::runtime_error("Mesh is discontinuous!");
-		SET_MESH_ERROR(errors, MeshErrors::NonManifold);
+		auto fparts = mesh.add_property_map<face_descriptor, std::size_t>("f:part").first;
+		int numSeparatedRegions = PMP::connected_components(mesh, fparts);
+		mesh.remove_property_map(fparts);
+		if(numSeparatedRegions > 1)
+		{
+			if(throwOnFail)
+				throw std::runtime_error("Mesh is discontinuous!");
+			SET_MESH_ERROR(errors, MeshErrors::Discontinuous);
+		}
 	}
 
-	if(!PMP::triangulate_faces(mesh))
+	if(HAS_ERROR(MeshErrors::NonTriangular, filter))
 	{
-		if(throwOnFail)
-			throw std::runtime_error("Mesh not triangulated!");
-		SET_MESH_ERROR(errors, MeshErrors::NonTriangular);
+		if(!PMP::triangulate_faces(mesh))
+		{
+			if(throwOnFail)
+				throw std::runtime_error("Mesh not triangulated!");
+			SET_MESH_ERROR(errors, MeshErrors::NonTriangular);
+		}
 	}
 
 	PMP::autorefine(mesh);
 
-	if(PMP::does_self_intersect(mesh))
+	if(HAS_ERROR(MeshErrors::SelfIntersects, filter))
 	{
-		if(throwOnFail)
-			throw std::runtime_error("Mesh self-intersects!");
-		SET_MESH_ERROR(errors, MeshErrors::SelfIntersects);
+		if(PMP::does_self_intersect(mesh))
+		{
+			if(throwOnFail)
+				throw std::runtime_error("Mesh self-intersects!");
+			SET_MESH_ERROR(errors, MeshErrors::SelfIntersects);
+		}
 	}
 
 	return errors;
@@ -466,33 +476,41 @@ double processSubMesh(
 
 			regionGrowth(config, mesh, meshBoxes, grid, gridCells, printCostCache);
 
+			int numInitialMeshes = meshBoxes.size();
 			double parallelCost = parallelPrintingCost(config, grid, meshBoxes, printCostCache);
-
-			//saveMeshes(dirName, mbPtrs);
-
-			//std::cout << "Blocks Grown." << std::endl;
-			int freePrinters = numPrinters - meshBoxes.size();
 
 			std::vector<std::unique_ptr<MeshBox>> fillerMeshBoxes;
 			bool modelCovered = fillEmptyBoundarySpaces(
-				config, mesh, fillerMeshBoxes, parallelCost, grid, gridCells, printCostCache);
+				config, mesh, 
+				fillerMeshBoxes, 
+				parallelCost, 
+#if RESOLVE_EMPTIES==true
+				-1,
+#else
+				numPrinters - numInitialMeshes,
+#endif
+				grid, gridCells, 
+				printCostCache);
 
-			bool noExcessPrinters = !fillerMeshBoxes.empty();
+			int numVoids = fillerMeshBoxes.size();
 
+#if NO_EMPTY_FILL==false
+			for(auto& mb: fillerMeshBoxes)
+				meshBoxes.push_back(std::move(mb));
 			parallelCost = parallelPrintingCost(config, grid, meshBoxes, printCostCache);
+#endif
 
+			bool noExcessPrinters = meshBoxes.size() <= numPrinters;
 
 #if REPORT_STANDARD
 			std::cout << "After Block Growth Phase: " << std::endl;
 			std::cout << "\tParallel Printing Time = " << parallelCost << std::endl;
-			std::cout << "\t# meshes: " << meshBoxes.size();
-			std::cout << " | # voids: " << fillerMeshBoxes.size() << std::endl;
+			std::cout << "\t# meshes: " << numInitialMeshes;
+			std::cout << " | # voids: ";
+		    std::cout << numVoids << std::endl;
 #endif
 
 #if RESOLVE_EMPTIES == true
-			for(auto& mb: fillerMeshBoxes)
-				meshBoxes.push_back(std::move(mb));
-
 			noExcessPrinters = resolveMeshExcess(
 				config, 
 				meshBoxes, 
@@ -686,8 +704,10 @@ int run(int argc, const char* argv[])
 	if(!config.symmetrySkip &&
 	   (symmetrySucceeded = symmetrySplit(inputMesh, &rightMesh, &leftMesh)))
 	{
-		validate(rightMesh, true);
-		validate(leftMesh, true);
+		constexpr MeshErrorSet ALLOW_DISCONTINUOUS = 
+			ALL_MESH_ERRORS ^ (MeshErrorSet)MeshErrors::Discontinuous;
+		validate(rightMesh, true, ALLOW_DISCONTINUOUS);
+		validate(leftMesh, true, ALLOW_DISCONTINUOUS);
 		subMeshes.push_back(rightMesh);
 		subMeshes.push_back(leftMesh);
 

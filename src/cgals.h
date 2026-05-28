@@ -47,18 +47,21 @@ K::Vector_3 normalize(const K::Vector_3& v);
 enum class MeshErrors
 {
 	NonManifold = 1 << 0,
-	NonTriangular = 1 << 1,
-	SelfIntersects = 1 << 2,
-	UncertainManifoldness = 1 << 3
+	Discontinuous = 1 << 1,
+	NonTriangular = 1 << 2,
+	SelfIntersects = 1 << 3,
+	UncertainManifoldness = 1 << 4
 };
 
 typedef unsigned int MeshErrorSet;
 
 #define NO_MESH_ERRORS	0
+#define ALL_MESH_ERRORS	(std::numeric_limits<MeshErrorSet>::max())
 #define SET_MESH_ERROR(errors, error) (errors |= static_cast<MeshErrorSet>(error))
 #define INVALID(errorRet) ((errorRet != 0) ? true : false)
 #define VALID(errorRet) ((errorRet == 0) ? true : false)
-#define HAS_ERROR(error, errorRet) ((errorRet & error) != 0 ? true : false)
+#define HAS_ERROR(error, errorRet) ((errorRet & static_cast<MeshErrorSet>(error)) != 0 ? true : false)
 
-MeshErrorSet validate(Mesh& mesh, bool throwOnFail);
+MeshErrorSet validate(
+	Mesh& mesh, bool throwOnFail, MeshErrorSet filter = ALL_MESH_ERRORS);
  

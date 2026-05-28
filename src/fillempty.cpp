@@ -52,8 +52,6 @@ struct CostData
 	///////////////////////////////////////////////////////////////////////////
 	// This accounts for core printing cost + minimal support structure print costs
 	double printCost = printingCost(config, grid, *newMeshBox, printCostCache);
-	if(printCost > currentParallelCost)
-		return -1.0;
 	double dPrintCost = printCost - currentPrintCost;
 
 	// Application of standard objective
@@ -127,6 +125,9 @@ bool growBoxIfPossible(
 			  << " = " << costs[*bestDirection] << std::endl;
 #endif
 
+	if(currentParallelCost > 0.0 && costs[*bestDirection] > currentParallelCost)
+		return false;
+
 	MeshBox& newMeshBox = *costData[*bestDirection].newRegion;
 	targetBox.mesh = newMeshBox.mesh;
 	targetBox.dims = newMeshBox.dims;
@@ -178,11 +179,18 @@ std::unique_ptr<MeshBox> fillEmptyBoundarySpace(
 	return std::move(meshBox);
 }
 
+bool arePrintersAvailable(
+	int printerLimit, std::vector<std::unique_ptr<MeshBox>>& printers)
+{
+	return !(printerLimit >= 0 && printers.size() >= printerLimit);
+}
+
 bool fillEmptyBoundarySpaces(
 	const Config& config,
 	const Mesh& mesh,
 	std::vector<std::unique_ptr<MeshBox>>& outMeshBoxes,
 	double currentParallelCost,
+	int printerLimit,
 	const Grid& grid, 
 	mv::vector3<GridCell>& gridCells,
 	PrintingCostCache& printCostCache)
@@ -190,7 +198,7 @@ bool fillEmptyBoundarySpaces(
 	//std::cout << "Filling empty regions... " << std::endl;
 
 	std::optional<Vector3D> found = findEmptyBoundarySpace(gridCells);
-	while(found)
+	while(found && arePrintersAvailable(printerLimit, outMeshBoxes))
 	{
 		outMeshBoxes.emplace_back(fillEmptyBoundarySpace(
 			config, mesh, 
@@ -201,5 +209,5 @@ bool fillEmptyBoundarySpaces(
 		found = findEmptyBoundarySpace(gridCells);
 	}
 
-	return true;
+	return !found;
 }
