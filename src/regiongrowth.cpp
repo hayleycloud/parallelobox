@@ -263,7 +263,7 @@ void grow(
 		break;                                                      
 	}
 
-	clipFromMesh(grid, parent, box);
+	clipFromMesh(grid, parent, box, true);
 }
 
 void sampleCells(
@@ -837,7 +837,7 @@ double computeExpandCost(
 	
 	std::unique_ptr<MeshBox> newMeshBox = std::make_unique<MeshBox>(*newRegion);
 
-	if(INVALID(clipFromMesh(grid, parent, *newMeshBox)))
+	if(INVALID(clipFromMesh(grid, parent, *newMeshBox, config.relaxSafeties)))
 		return -1.0;
 	
 	// Printability Constraint
@@ -1118,7 +1118,7 @@ void regionGrowth(
 
 	#pragma omp parallel for default(none) shared(sourceBoxes, grid, parent)
 	for(auto& sourceBox: sourceBoxes)
-		clipFromMesh(grid, parent, *sourceBox);
+		clipFromMesh(grid, parent, *sourceBox, config.relaxSafeties);
 
 	bool test = continueRegionGrowth(sourceBoxes, gridCells);
 	printMeshBoxes(sourceBoxes);

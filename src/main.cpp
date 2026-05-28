@@ -219,7 +219,7 @@ void assignMeshBoxesFrom(
 	for(const Cuboid& region: regions)
 	{
 		Mesh mesh;
-		if(INVALID(clipFromMesh(grid, parent, region, mesh)))
+		if(INVALID(clipFromMesh(grid, parent, region, mesh, true)))
 		{
 			std::cerr << "Mesh clip error?" << std::endl;
 		}

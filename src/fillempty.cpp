@@ -34,7 +34,7 @@ struct CostData
 	
 	std::unique_ptr<MeshBox> newMeshBox = std::make_unique<MeshBox>(*newRegion);
 
-	if(INVALID(clipFromMesh(grid, parent, *newMeshBox)))
+	if(INVALID(clipFromMesh(grid, parent, *newMeshBox, config.relaxSafeties)))
 		return -1.0;
 	
 	// Printability Constraint

@@ -300,7 +300,7 @@ std::vector<MeshBox*> getNeighbours(
 }
 
 // Merge without children
-bool mergeSoft(MeshBox& a, MeshBox& b)
+bool mergeSoft(MeshBox& a, MeshBox& b, bool relaxedChecks)
 {
 	const Mesh& aConst = a.mesh, bConst = b.mesh;
 	Mesh aTemp(aConst);
@@ -315,7 +315,10 @@ bool mergeSoft(MeshBox& a, MeshBox& b)
 	bool success = PMP::corefine_and_compute_union(aTemp, bTemp, aTemp);
 	if(success)
 	{
-		if(INVALID(validate(aTemp, false)))
+		MeshErrorSet filter = relaxedChecks ?
+			ALL_MESH_ERRORS ^ (MeshErrorSet)MeshErrors::Discontinuous :
+			ALL_MESH_ERRORS;
+		if(INVALID(validate(aTemp, false, filter)))
 			return false;
 
 		const Vector3D A = a.dims.end(), B = b.dims.end();
@@ -386,7 +389,8 @@ void recomputeNormals(MeshBox& meshBox)
 }
 
 
-MeshErrorSet clipFromMesh(const Grid& grid, const Mesh& mesh, const Cuboid& dims, Mesh& out)
+MeshErrorSet clipFromMesh(
+	const Grid& grid, const Mesh& mesh, const Cuboid& dims, Mesh& out, bool relaxedChecks)
 {
 	MeshErrorSet errors = NO_MESH_ERRORS;
 
@@ -409,16 +413,20 @@ MeshErrorSet clipFromMesh(const Grid& grid, const Mesh& mesh, const Cuboid& dims
 	if(!PMP::clip(out, bbox, CGAL::parameters::clip_volume(true)))
 		SET_MESH_ERROR(errors, MeshErrors::UncertainManifoldness);
 
-	SET_MESH_ERROR(errors, validate(out, false));
+	MeshErrorSet filter = relaxedChecks ?
+		ALL_MESH_ERRORS ^ (MeshErrorSet)MeshErrors::Discontinuous :
+		ALL_MESH_ERRORS;
+	SET_MESH_ERROR(errors, validate(out, false, filter));
 
 	assignNormals(out);
 
 	return errors;
 }
 
-MeshErrorSet clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child)
+MeshErrorSet clipFromMesh(
+	const Grid& grid, const Mesh& mesh, MeshBox& child, bool relaxedChecks)
 {
-	return clipFromMesh(grid, mesh, child.dims, child.mesh);
+	return clipFromMesh(grid, mesh, child.dims, child.mesh, relaxedChecks);
 }
 
 /*void getUniqueMeshBoxes(

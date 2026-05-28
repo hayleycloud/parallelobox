@@ -198,7 +198,7 @@ std::unique_ptr<MergeOption> getMergeOption(
 				std::make_unique<MeshBox>(neighbor->mesh, neighbor->dims);
 
 			double score = -1.0;
-			if(mergeSoft(*merger1, *merger2))
+			if(mergeSoft(*merger1, *merger2, config.relaxSafeties))
 			{
 				if(fitsVolume(config, merger1->mesh))
 				{
@@ -238,7 +238,7 @@ std::unique_ptr<MergeOption> getMergeOption(
 				std::make_unique<MeshBox>(bestNeighbor->mesh, bestNeighbor->dims);
 
 			bool succeeded = false;
-			if(mergeSoft(*newMesh, *neighborCopy))
+			if(mergeSoft(*newMesh, *neighborCopy, config.relaxSafeties))
 			{
 				if(fitsVolume(config, newMesh->mesh))
 				{
@@ -304,7 +304,7 @@ std::unique_ptr<MergeOption> getMergeOptionMP(
 				std::make_unique<MeshBox>(target.mesh, target.dims);
 
 			bool succeeded = false;
-			if(mergeSoft(*merger, *neighbor))
+			if(mergeSoft(*merger, *neighbor, config.relaxSafeties))
 			{
 				if(fitsVolume(config, merger->mesh))
 				{
@@ -362,7 +362,7 @@ std::unique_ptr<MergeOption> getMergeOptionMP(
 			std::unique_ptr<MeshBox> newMesh =
 				std::make_unique<MeshBox>(target.mesh, target.dims); 
 
-			if(mergeSoft(*newMesh, *neighborSrc[bestIndex]))
+			if(mergeSoft(*newMesh, *neighborSrc[bestIndex], config.relaxSafeties))
 			{
 				return std::make_unique<MergeOption>(
 					std::move(newMesh),

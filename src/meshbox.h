@@ -54,9 +54,9 @@ std::vector<GridCell*> sampleCells(
 	mv::vector3<GridCell>& gridCells,
 	const Vector3D& a, const Vector3D& b);
 
-MeshErrorSet clipFromMesh(const Grid& grid, const Mesh& mesh, const Cuboid& dims, Mesh& out);
+MeshErrorSet clipFromMesh(const Grid& grid, const Mesh& mesh, const Cuboid& dims, Mesh& out, bool relaxedChecks);
 
-MeshErrorSet clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child);
+MeshErrorSet clipFromMesh(const Grid& grid, const Mesh& mesh, MeshBox& child, bool relaxedChecks);
 
 void assignNormals(Mesh& mesh);
 
@@ -77,7 +77,7 @@ std::vector<MeshBox*> getNeighbours(
 	const MeshBox& box,
 	mv::vector3<GridCell>& gridCells);
 
-bool mergeSoft(MeshBox& a, MeshBox& b);
+bool mergeSoft(MeshBox& a, MeshBox& b, bool relaxedChecks);
 
 bool mergeSoft(MeshBox& a, MeshBox& b, MeshBox& c);
 
